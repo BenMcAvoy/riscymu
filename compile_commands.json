@@ -1,0 +1,16 @@
+[
+{
+  "directory": "C:\\Users\\Ben\\riscymu",
+  "arguments": ["C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\VC\\Tools\\MSVC\\14.50.35717\\bin\\HostX64\\x64\\cl.exe", "/c", "/nologo", "/MD", "/O2", "/std:c++latest", "/EHsc", "/IC:\\Users\\Ben\\AppData\\Local\\.xmake\\packages\\m\\magic_enum\\v0.9.8\\786729aa62a84d67b93b5916593d62cb\\include", "/IC:\\Users\\Ben\\AppData\\Local\\.xmake\\packages\\m\\magic_enum\\v0.9.8\\786729aa62a84d67b93b5916593d62cb\\include\\magic_enum", "/DNDEBUG", "/Fobuild\\.objs\\riscymu\\windows\\x64\\release\\src\\cpu.cpp.obj", "src\\cpu.cpp"],
+  "file": "src\\cpu.cpp"
+},
+{
+  "directory": "C:\\Users\\Ben\\riscymu",
+  "arguments": ["C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\VC\\Tools\\MSVC\\14.50.35717\\bin\\HostX64\\x64\\cl.exe", "/c", "/nologo", "/MD", "/O2", "/std:c++latest", "/EHsc", "/IC:\\Users\\Ben\\AppData\\Local\\.xmake\\packages\\m\\magic_enum\\v0.9.8\\786729aa62a84d67b93b5916593d62cb\\include", "/IC:\\Users\\Ben\\AppData\\Local\\.xmake\\packages\\m\\magic_enum\\v0.9.8\\786729aa62a84d67b93b5916593d62cb\\include\\magic_enum", "/DNDEBUG", "/Fobuild\\.objs\\riscymu\\windows\\x64\\release\\src\\ins.cpp.obj", "src\\ins.cpp"],
+  "file": "src\\ins.cpp"
+},
+{
+  "directory": "C:\\Users\\Ben\\riscymu",
+  "arguments": ["C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\VC\\Tools\\MSVC\\14.50.35717\\bin\\HostX64\\x64\\cl.exe", "/c", "/nologo", "/MD", "/O2", "/std:c++latest", "/EHsc", "/IC:\\Users\\Ben\\AppData\\Local\\.xmake\\packages\\m\\magic_enum\\v0.9.8\\786729aa62a84d67b93b5916593d62cb\\include", "/IC:\\Users\\Ben\\AppData\\Local\\.xmake\\packages\\m\\magic_enum\\v0.9.8\\786729aa62a84d67b93b5916593d62cb\\include\\magic_enum", "/DNDEBUG", "/Fobuild\\.objs\\riscymu\\windows\\x64\\release\\src\\main.cpp.obj", "src\\main.cpp"],
+  "file": "src\\main.cpp"
+}]

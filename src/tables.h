@@ -29,6 +29,9 @@ constexpr auto make_r_table()
     MAP(0b0000000, 0b011, Sltu);
 
     return r_table;
+
+#undef IDX
+#undef MAP
 }
 
 constexpr auto make_i_table()
@@ -50,6 +53,8 @@ constexpr auto make_i_table()
     MAP(0b011, Sltiu);
 
     return i_table;
+
+#undef MAP
 }
 
 constexpr auto make_load_table()
@@ -65,6 +70,8 @@ constexpr auto make_load_table()
     MAP(0b101, Lhu);
 
     return load_table;
+
+#undef MAP
 }
 
 constexpr auto make_store_table()
@@ -78,6 +85,8 @@ constexpr auto make_store_table()
     MAP(0b010, Sw);
 
     return store_table;
+
+#undef MAP
 }
 
 constexpr auto make_branch_table()
@@ -94,6 +103,8 @@ constexpr auto make_branch_table()
     MAP(0b111, Bgeu);
 
     return branch_table;
+
+#undef MAP
 }
 
 // all other tables are small enough that it is not worth it

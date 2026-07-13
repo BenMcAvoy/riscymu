@@ -10,7 +10,7 @@ int main(int argc, char **argv)
     std::ifstream prog("program.bin", std::ios::binary);
     if (!prog)
     {
-        std::print("Failed to open program.bin\n");
+        std::println("Failed to open program.bin");
         return 1;
     }
 
@@ -23,13 +23,27 @@ int main(int argc, char **argv)
     try
     {
         auto ins = cpu->fetch_instruction();
-
-        std::string ins_str = ins.to_string();
-        std::print("Fetched instruction: {}\n", ins_str);
+        std::println("Decoded instruction: {}", ins.to_string());
     }
     catch (const std::exception &e)
     {
-        std::print("Error fetching instruction: {}\n", e.what());
+        std::println("Error fetching instruction: {}", e.what());
+    }
+
+    // Dump the first 16 bytes of memory for debugging
+    std::println("\nMemory dump (first 16 bytes):");
+    for (std::size_t i = 0; i < 16; ++i)
+    {
+        std::uint8_t byte = cpu->read_mem<std::uint8_t>(i);
+        std::print("0x{:02x} ", byte);
+    }
+
+    // Dump first 8 registers for debugging
+    std::println("\n\nRegister dump (first 8 registers):");
+    for (std::size_t i = 0; i < 8; ++i)
+    {
+        std::uint64_t reg_value = cpu->get_register(static_cast<RegisterIdx>(i));
+        std::println("x{}: 0x{:016x}", i, reg_value);
     }
 
     return 0;

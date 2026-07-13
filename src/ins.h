@@ -103,11 +103,6 @@ struct Instruction
     // source register 2
     std::uint8_t rs2 = 0;
 
-    // function code, used to differentiate between instructions with the same opcode
-    std::uint8_t funct3 = 0;
-    // function code, used to differentiate between instructions with the same opcode
-    std::uint8_t funct7 = 0;
-
     // immediate value, used for stuff like addi, anything with an immediate value, or for branch offsets
     std::int64_t imm = 0;
 

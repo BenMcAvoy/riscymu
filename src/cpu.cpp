@@ -10,15 +10,18 @@ CPU::CPU()
     pc = 0;
 }
 
-void fetch_half_instruction(Instruction &ins, std::int16_t half)
+void CPU::fetch_half_instruction(Instruction &ins, std::int16_t half) const
 {
     throw std::runtime_error("fetch_half_instruction not implemented");
 }
 
-void fetch_full_instruction_r_type(Instruction &ins, std::int32_t full)
+void CPU::fetch_full_instruction_r_type(Instruction &ins, std::int32_t full) const
 {
+    auto funct3 = (full >> 12) & 0b111;
+    auto funct7 = (full >> 25) & 0b1111111;
+
     // key to differentiate between instructions with the same opcode
-    std::uint16_t key = (ins.funct7 << 3) | ins.funct3;
+    std::uint16_t key = (funct7 << 3) | funct3;
 
     constexpr auto r_table = make_r_table();
     OpCode op = r_table[key];
@@ -37,9 +40,9 @@ void fetch_full_instruction_r_type(Instruction &ins, std::int32_t full)
     // TODO: Other stuff
 }
 
-void fetch_full_instruction_i_type(Instruction &ins, std::int32_t full)
+void CPU::fetch_full_instruction_i_type(Instruction &ins, std::int32_t full) const
 {
-    auto funct3 = ins.funct3;
+    auto funct3 = (full >> 12) & 0b111;
 
     constexpr auto i_table = make_i_table();
     OpCode op = i_table[funct3];
@@ -58,7 +61,7 @@ void fetch_full_instruction_i_type(Instruction &ins, std::int32_t full)
     // TODO: Other stuff
 }
 
-void fetch_full_instruction(Instruction &ins, std::int32_t full)
+void CPU::fetch_full_instruction(Instruction &ins, std::int32_t full) const
 {
     // 7 bits for opcode
     OpGroup op_group = static_cast<OpGroup>(full & 0b1111111);
@@ -73,10 +76,8 @@ void fetch_full_instruction(Instruction &ins, std::int32_t full)
         // R-type instruction
         ins.format = Format::R;
         ins.rd = (full >> 7) & 0b11111;
-        ins.funct3 = (full >> 12) & 0b111;
         ins.rs1 = (full >> 15) & 0b11111;
         ins.rs2 = (full >> 20) & 0b11111;
-        ins.funct7 = (full >> 25) & 0b1111111;
         fetch_full_instruction_r_type(ins, full);
 
         break;
@@ -87,7 +88,6 @@ void fetch_full_instruction(Instruction &ins, std::int32_t full)
         // I-type instruction
         ins.format = Format::I;
         ins.rd = (full >> 7) & 0b11111;
-        ins.funct3 = (full >> 12) & 0b111;
         ins.rs1 = (full >> 15) & 0b11111;
         ins.imm = (full >> 20) & 0b111111111111; // 12 bits
         fetch_full_instruction_i_type(ins, full);
@@ -108,6 +108,8 @@ Instruction CPU::fetch_instruction() const
     bool compressed = (half & 0b11) != 0b11;
 
     ins.raw = half;
+    ins.length = compressed ? 2 : 4;
+
     if (!compressed)
     {
         std::uint16_t half2 = mem.read<std::uint16_t>(pc + 2);

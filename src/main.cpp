@@ -20,15 +20,18 @@ int main(int argc, char **argv)
     CPU *cpu = new CPU();
     cpu->write_mem(0, buffer.data(), buffer.size());
 
+    Instruction ins;
     try
     {
-        auto ins = cpu->fetch_instruction();
+        ins = cpu->fetch_instruction();
         std::println("Decoded instruction: {}", ins.to_string());
     }
     catch (const std::exception &e)
     {
         std::println("Error fetching instruction: {}", e.what());
     }
+
+    cpu->execute_instruction(ins);
 
     // Dump the first 16 bytes of memory for debugging
     std::println("\nMemory dump (first 16 bytes):");

@@ -36,8 +36,6 @@ void CPU::fetch_full_instruction_r_type(Instruction &ins, std::int32_t full) con
     {
         throw std::runtime_error("Unsupported R-type instruction");
     }
-
-    // TODO: Other stuff
 }
 
 void CPU::fetch_full_instruction_i_type(Instruction &ins, std::int32_t full) const
@@ -57,8 +55,6 @@ void CPU::fetch_full_instruction_i_type(Instruction &ins, std::int32_t full) con
     {
         throw std::runtime_error("Unsupported I-type instruction");
     }
-
-    // TODO: Other stuff
 }
 
 void CPU::fetch_full_instruction(Instruction &ins, std::int32_t full) const
@@ -127,4 +123,20 @@ Instruction CPU::fetch_instruction() const
     }
 
     return ins;
+}
+
+void CPU::execute_instruction(const Instruction &ins)
+{
+    switch (ins.op)
+    {
+    case OpCode::Addi:
+    {
+        std::uint64_t &rd = get_register(static_cast<RegisterIdx>(ins.rd));
+        std::uint64_t rs1_val = get_register(static_cast<RegisterIdx>(ins.rs1));
+        rd = rs1_val + ins.imm;
+        break;
+    }
+    }
+
+    pc += ins.length;
 }

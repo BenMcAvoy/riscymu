@@ -99,6 +99,8 @@ public:
         return general_registers[static_cast<std::size_t>(idx)];
     }
 
+    void execute_instruction(const Instruction &ins);
+
 private:
     // x0-x31
     std::array<std::uint64_t, 32> general_registers;

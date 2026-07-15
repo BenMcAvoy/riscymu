@@ -170,17 +170,17 @@ namespace
     }
 }
 
-static inline constexpr auto op_table = make_op_table();
-static inline constexpr auto op_imm_table = make_op_imm_table();
-static inline constexpr auto load_table = make_load_table();
-static inline constexpr auto store_table = make_store_table();
-static inline constexpr auto branch_table = make_branch_table();
-static inline constexpr auto jal_table = make_jal_table();
-static inline constexpr auto jalr_table = make_jalr_table();
-static inline constexpr auto lui_table = make_lui_table();
-static inline constexpr auto auipc_table = make_auipc_table();
-static inline constexpr auto etype_table = make_etype_table();
-static inline constexpr auto fence_table = make_fence_table();
+alignas(64) static inline constexpr auto op_table = make_op_table();
+alignas(64) static inline constexpr auto op_imm_table = make_op_imm_table();
+alignas(64) static inline constexpr auto load_table = make_load_table();
+alignas(64) static inline constexpr auto store_table = make_store_table();
+alignas(64) static inline constexpr auto branch_table = make_branch_table();
+alignas(64) static inline constexpr auto jal_table = make_jal_table();
+alignas(64) static inline constexpr auto jalr_table = make_jalr_table();
+alignas(64) static inline constexpr auto lui_table = make_lui_table();
+alignas(64) static inline constexpr auto auipc_table = make_auipc_table();
+alignas(64) static inline constexpr auto etype_table = make_etype_table();
+alignas(64) static inline constexpr auto fence_table = make_fence_table();
 
 OpCode decode_full_op(std::uint32_t instruction)
 {
@@ -247,4 +247,22 @@ OpCode decode_full_etype(std::uint32_t instruction)
 OpCode decode_full_fence(std::uint32_t instruction)
 {
     return fence_table[0];
+}
+
+void warm_tables()
+{
+    for (std::uint32_t i = 0; i < 0xFFFFFFFF; ++i)
+    {
+        decode_full_op(i);
+        decode_full_op_imm(i);
+        decode_full_load(i);
+        decode_full_store(i);
+        decode_full_branch(i);
+        decode_full_jal(i);
+        decode_full_jalr(i);
+        decode_full_lui(i);
+        decode_full_auipc(i);
+        decode_full_etype(i);
+        decode_full_fence(i);
+    }
 }

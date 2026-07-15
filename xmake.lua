@@ -13,3 +13,8 @@ target("riscymu")
 if is_mode("debug") then
     set_symbols("debug")
 end
+
+-- check for windows
+if is_plat("windows") then
+    add_defines("RISCYMU_WINDOWS")
+end

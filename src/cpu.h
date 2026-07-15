@@ -122,6 +122,8 @@ public:
     void execute_instruction(const Instruction &ins);
 
     int get_mhz();
+    void warm();
+    void reset(bool reset_instrumentation = false);
 
 private:
     // x0-x31

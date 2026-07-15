@@ -391,3 +391,20 @@ int CPU::get_mhz()
     double mhz = (static_cast<double>(executed_instructions) / elapsed_time) * 1000.0;
     return static_cast<int>(mhz);
 }
+
+void CPU::warm()
+{
+    warm_tables();
+}
+
+void CPU::reset(bool reset_instrumentation)
+{
+    general_registers.fill(0);
+    pc = 0;
+
+    if (reset_instrumentation)
+    {
+        executed_instructions = 0;
+        start_time = std::chrono::high_resolution_clock::now();
+    }
+}

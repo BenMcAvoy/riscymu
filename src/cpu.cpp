@@ -89,37 +89,37 @@ void CPU::decode_full_opcode(Instruction &ins, std::int32_t full, OpGroup opgrou
     switch (opgroup)
     {
     case OpGroup::Op:
-        ins.op = decode_full_op(ins.raw);
+        decode_full_op(ins);
         break;
     case OpGroup::OpImm:
-        ins.op = decode_full_op_imm(ins.raw);
+        decode_full_op_imm(ins);
         break;
     case OpGroup::Load:
-        ins.op = decode_full_load(ins.raw);
+        decode_full_load(ins);
         break;
     case OpGroup::Store:
-        ins.op = decode_full_store(ins.raw);
+        decode_full_store(ins);
         break;
     case OpGroup::Branch:
-        ins.op = decode_full_branch(ins.raw);
+        decode_full_branch(ins);
         break;
     case OpGroup::Jal:
-        ins.op = decode_full_jal(ins.raw);
+        decode_full_jal(ins);
         break;
     case OpGroup::Jalr:
-        ins.op = decode_full_jalr(ins.raw);
+        decode_full_jalr(ins);
         break;
     case OpGroup::Lui:
-        ins.op = decode_full_lui(ins.raw);
+        decode_full_lui(ins);
         break;
     case OpGroup::Auipc:
-        ins.op = decode_full_auipc(ins.raw);
+        decode_full_auipc(ins);
         break;
     case OpGroup::EType:
-        ins.op = decode_full_etype(ins.raw);
+        decode_full_etype(ins);
         break;
     case OpGroup::Fence:
-        ins.op = decode_full_fence(ins.raw);
+        decode_full_fence(ins);
         break;
     }
 }
@@ -408,4 +408,70 @@ void CPU::reset(bool reset_instrumentation)
         executed_instructions = 0;
         start_time = std::chrono::high_resolution_clock::now();
     }
+}
+
+void CPU::decode_full_op(Instruction &ins) const
+{
+    auto funct3 = extract_funct3(ins.raw);
+    auto funct7 = extract_funct7(ins.raw);
+
+    auto idx = (funct7 << 3) | funct3;
+    ins.op = op_table[idx];
+}
+
+void CPU::decode_full_op_imm(Instruction &ins) const
+{
+    auto funct3 = extract_funct3(ins.raw);
+    auto imm_11_5 = ins.imm >> 5; // Extract bits 11:5 from the immediate value
+
+    auto idx = (imm_11_5 << 3) | funct3;
+    ins.op = op_imm_table[idx];
+}
+
+void CPU::decode_full_load(Instruction &ins) const
+{
+    auto funct3 = extract_funct3(ins.raw);
+    ins.op = load_table[funct3];
+}
+
+void CPU::decode_full_store(Instruction &ins) const
+{
+    auto funct3 = extract_funct3(ins.raw);
+    ins.op = store_table[funct3];
+}
+
+void CPU::decode_full_branch(Instruction &ins) const
+{
+    auto funct3 = extract_funct3(ins.raw);
+    ins.op = branch_table[funct3];
+}
+
+void CPU::decode_full_jal(Instruction &ins) const
+{
+    ins.op = jal_table[0];
+}
+
+void CPU::decode_full_jalr(Instruction &ins) const
+{
+    ins.op = jalr_table[0];
+}
+
+void CPU::decode_full_lui(Instruction &ins) const
+{
+    ins.op = lui_table[0];
+}
+
+void CPU::decode_full_auipc(Instruction &ins) const
+{
+    ins.op = auipc_table[0];
+}
+
+void CPU::decode_full_etype(Instruction &ins) const
+{
+    ins.op = etype_table[ins.imm];
+}
+
+void CPU::decode_full_fence(Instruction &ins) const
+{
+    ins.op = fence_table[0];
 }

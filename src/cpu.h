@@ -139,17 +139,17 @@ private:
 
     void decode_full_opcode(Instruction &ins, std::int32_t full, OpGroup opgroup) const;
 
-    // void decode_full_op(Instruction &ins, std::int32_t full) const;
-    // void decode_full_op_imm(Instruction &ins, std::int32_t full) const;
-    // void decode_full_load(Instruction &ins, std::int32_t full) const;
-    // void decode_full_store(Instruction &ins, std::int32_t full) const;
-    // void decode_full_branch(Instruction &ins, std::int32_t full) const;
-    // void decode_full_jal(Instruction &ins, std::int32_t full) const;
-    // void decode_full_jalr(Instruction &ins, std::int32_t full) const;
-    // void decode_full_auipc(Instruction &ins, std::int32_t full) const;
-    // void decode_full_lui(Instruction &ins, std::int32_t full) const;
-    // void decode_full_etype(Instruction &ins, std::int32_t full) const;
-    // void decode_full_fence(Instruction &ins, std::int32_t full) const;
+    void decode_full_op(Instruction &ins) const;
+    void decode_full_op_imm(Instruction &ins) const;
+    void decode_full_load(Instruction &ins) const;
+    void decode_full_store(Instruction &ins) const;
+    void decode_full_branch(Instruction &ins) const;
+    void decode_full_jal(Instruction &ins) const;
+    void decode_full_jalr(Instruction &ins) const;
+    void decode_full_auipc(Instruction &ins) const;
+    void decode_full_lui(Instruction &ins) const;
+    void decode_full_etype(Instruction &ins) const;
+    void decode_full_fence(Instruction &ins) const;
 
     void fetch_full_instruction(Instruction &ins, std::int32_t full) const;
     void fetch_half_instruction(Instruction &ins, std::int16_t half) const;

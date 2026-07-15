@@ -9,3 +9,7 @@ target("riscymu")
     add_files("src/*.cpp")
     set_rundir("$(projectdir)")
     add_packages("magic_enum")
+
+if is_mode("debug") then
+    set_symbols("debug")
+end

@@ -25,8 +25,7 @@ enum class OpGroup : std::uint8_t
     Jalr = 0b1100111,
     Lui = 0b0110111,
     Auipc = 0b0010111,
-    Ecall = 0b1110011,
-    Ebreak = 0b1110011,
+    EType = 0b1110011,
     Fence = 0b0001111,
     NA,
 };
@@ -104,6 +103,8 @@ struct Instruction
     std::uint8_t rs2 = 0;
 
     // immediate value, used for stuff like addi, anything with an immediate value, or for branch offsets
+    // important! shamt may be crammed into this field in the upper bits, so make sure to mask it before using it
+    // it contains the signed *and* unsigned values, one being the full signed value and one being the unsigned value for things like shamt
     std::int64_t imm = 0;
 
     // because of c extension, it could be 2 bytes instead of 4

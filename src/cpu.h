@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <chrono>
 
 #include "ins.h"
 #include "mem.h"
@@ -94,23 +95,65 @@ public:
         return mem.read<T>(addr);
     }
 
-    std::uint64_t &get_register(RegisterIdx idx)
+    std::uint64_t get_register(RegisterIdx idx)
     {
         return general_registers[static_cast<std::size_t>(idx)];
     }
 
+    void set_register(RegisterIdx idx, std::uint64_t value)
+    {
+        if (idx == RegisterIdx::Zero)
+        {
+            return; // x0 is always zero, cannot be modified
+        }
+
+        general_registers[static_cast<std::size_t>(idx)] = value;
+    }
+
+    void set_register(std::size_t idx, std::uint64_t value)
+    {
+        set_register(static_cast<RegisterIdx>(idx), value);
+    }
+    std::uint64_t get_register(std::size_t idx)
+    {
+        return get_register(static_cast<RegisterIdx>(idx));
+    }
+
     void execute_instruction(const Instruction &ins);
+
+    int get_mhz();
 
 private:
     // x0-x31
     std::array<std::uint64_t, 32> general_registers;
     std::uintptr_t pc; // sp reg for the program counter
 
-    void fetch_half_instruction(Instruction &ins, std::int16_t half) const;
+    void decode_full_r_type(Instruction &ins, std::int32_t full) const;
+    void decode_full_i_type(Instruction &ins, std::int32_t full) const;
+    void decode_full_s_type(Instruction &ins, std::int32_t full) const;
+    void decode_full_b_type(Instruction &ins, std::int32_t full) const;
+    void decode_full_u_type(Instruction &ins, std::int32_t full) const;
+    void decode_full_j_type(Instruction &ins, std::int32_t full) const;
+
+    void decode_full_opcode(Instruction &ins, std::int32_t full) const;
+
+    // void decode_full_op(Instruction &ins, std::int32_t full) const;
+    // void decode_full_op_imm(Instruction &ins, std::int32_t full) const;
+    // void decode_full_load(Instruction &ins, std::int32_t full) const;
+    // void decode_full_store(Instruction &ins, std::int32_t full) const;
+    // void decode_full_branch(Instruction &ins, std::int32_t full) const;
+    // void decode_full_jal(Instruction &ins, std::int32_t full) const;
+    // void decode_full_jalr(Instruction &ins, std::int32_t full) const;
+    // void decode_full_auipc(Instruction &ins, std::int32_t full) const;
+    // void decode_full_lui(Instruction &ins, std::int32_t full) const;
+    // void decode_full_etype(Instruction &ins, std::int32_t full) const;
+    // void decode_full_fence(Instruction &ins, std::int32_t full) const;
 
     void fetch_full_instruction(Instruction &ins, std::int32_t full) const;
-    void fetch_full_instruction_r_type(Instruction &ins, std::int32_t full) const;
-    void fetch_full_instruction_i_type(Instruction &ins, std::int32_t full) const;
+    void fetch_half_instruction(Instruction &ins, std::int16_t half) const;
 
-    Mem<1024 * 1024> mem; // 1MB of memory
+    int executed_instructions;
+    mutable std::chrono::time_point<std::chrono::high_resolution_clock> start_time;
+
+    Mem<1024 * 1024> mem{}; // 1MB of memory
 };

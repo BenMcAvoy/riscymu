@@ -182,87 +182,32 @@ alignas(64) static inline constexpr auto auipc_table = make_auipc_table();
 alignas(64) static inline constexpr auto etype_table = make_etype_table();
 alignas(64) static inline constexpr auto fence_table = make_fence_table();
 
-OpCode decode_full_op(std::uint32_t instruction)
-{
-    auto funct3 = extract_funct3(instruction);
-    auto funct7 = extract_funct7(instruction);
-
-    auto idx = (funct7 << 3) | funct3;
-    return op_table[idx];
-}
-
-OpCode decode_full_op_imm(std::uint32_t instruction)
-{
-    auto funct3 = extract_funct3(instruction);
-    auto imm_11_5 = extract(instruction, 25, 31);
-
-    auto idx = (imm_11_5 << 3) | funct3;
-    return op_imm_table[idx];
-}
-
-OpCode decode_full_load(std::uint32_t instruction)
-{
-    auto funct3 = extract_funct3(instruction);
-    return load_table[funct3];
-}
-
-OpCode decode_full_store(std::uint32_t instruction)
-{
-    auto funct3 = extract_funct3(instruction);
-    return store_table[funct3];
-}
-
-OpCode decode_full_branch(std::uint32_t instruction)
-{
-    auto funct3 = extract_funct3(instruction);
-    return branch_table[funct3];
-}
-
-OpCode decode_full_jal(std::uint32_t instruction)
-{
-    return jal_table[0];
-}
-
-OpCode decode_full_jalr(std::uint32_t instruction)
-{
-    return jalr_table[0];
-}
-
-OpCode decode_full_lui(std::uint32_t instruction)
-{
-    return lui_table[0];
-}
-
-OpCode decode_full_auipc(std::uint32_t instruction)
-{
-    return auipc_table[0];
-}
-
-OpCode decode_full_etype(std::uint32_t instruction)
-{
-    auto imm = extract(instruction, 20, 31);
-    return etype_table[imm];
-}
-
-OpCode decode_full_fence(std::uint32_t instruction)
-{
-    return fence_table[0];
-}
-
 void warm_tables()
 {
-    for (std::uint32_t i = 0; i < 0xFFFFFFFF; ++i)
-    {
-        decode_full_op(i);
-        decode_full_op_imm(i);
-        decode_full_load(i);
-        decode_full_store(i);
-        decode_full_branch(i);
-        decode_full_jal(i);
-        decode_full_jalr(i);
-        decode_full_lui(i);
-        decode_full_auipc(i);
-        decode_full_etype(i);
-        decode_full_fence(i);
-    }
+    volatile OpCode dummy{};
+
+    for (auto v : op_table)
+        dummy = v;
+    for (auto v : op_imm_table)
+        dummy = v;
+    for (auto v : load_table)
+        dummy = v;
+    for (auto v : store_table)
+        dummy = v;
+    for (auto v : branch_table)
+        dummy = v;
+    for (auto v : jal_table)
+        dummy = v;
+    for (auto v : jalr_table)
+        dummy = v;
+    for (auto v : lui_table)
+        dummy = v;
+    for (auto v : auipc_table)
+        dummy = v;
+    for (auto v : etype_table)
+        dummy = v;
+    for (auto v : fence_table)
+        dummy = v;
+
+    (void)dummy;
 }

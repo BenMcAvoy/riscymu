@@ -89,7 +89,7 @@ struct Instruction
     // original
     std::uint32_t raw = 0;
     Format format = Format::NA;
-    OpGroup op_group = OpGroup::NA;
+    OpGroup opgroup = OpGroup::NA;
 
     // actual opcode
     OpCode op = OpCode::NA;

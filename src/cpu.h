@@ -137,7 +137,7 @@ private:
     void decode_full_u_type(Instruction &ins, std::int32_t full) const;
     void decode_full_j_type(Instruction &ins, std::int32_t full) const;
 
-    void decode_full_opcode(Instruction &ins, std::int32_t full) const;
+    void decode_full_opcode(Instruction &ins, std::int32_t full, OpGroup opgroup) const;
 
     // void decode_full_op(Instruction &ins, std::int32_t full) const;
     // void decode_full_op_imm(Instruction &ins, std::int32_t full) const;

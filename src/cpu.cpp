@@ -84,12 +84,8 @@ void CPU::decode_full_j_type(Instruction &ins, std::int32_t full) const
     ins.imm = sign_extend(imm, 21);
 }
 
-void CPU::decode_full_opcode(Instruction &ins, std::int32_t full) const
+void CPU::decode_full_opcode(Instruction &ins, std::int32_t full, OpGroup opgroup) const
 {
-    auto opgroup = static_cast<OpGroup>(extract_opcode(full));
-    std::string_view opgroup_name = magic_enum::enum_name(opgroup);
-    // std::println("Decoding instruction: 0x{:08x}, opgroup: {}", full, opgroup_name);
-
     switch (opgroup)
     {
     case OpGroup::Op:
@@ -130,12 +126,12 @@ void CPU::decode_full_opcode(Instruction &ins, std::int32_t full) const
 
 void CPU::fetch_full_instruction(Instruction &ins, std::int32_t full) const
 {
-    OpGroup op_group = static_cast<OpGroup>(extract_opcode(full));
-    ins.op_group = op_group;
+    OpGroup opgroup = static_cast<OpGroup>(extract_opcode(full));
+    ins.opgroup = opgroup;
 
-    // std::println("Fetched instruction: 0x{:08x}, op_group: 0x{:02x}", full, static_cast<std::underlying_type_t<OpGroup>>(op_group));
+    // std::println("Fetched instruction: 0x{:08x}, opgroup: 0x{:02x}", full, static_cast<std::underlying_type_t<OpGroup>>(opgroup));
 
-    switch (op_group)
+    switch (opgroup)
     {
     case OpGroup::Op:
         decode_full_r_type(ins, full);
@@ -185,7 +181,7 @@ void CPU::fetch_full_instruction(Instruction &ins, std::int32_t full) const
         throw std::runtime_error("Unsupported instruction format");
     }
 
-    decode_full_opcode(ins, full);
+    decode_full_opcode(ins, full, opgroup);
 }
 
 Instruction CPU::fetch_instruction() const
@@ -198,6 +194,11 @@ Instruction CPU::fetch_instruction() const
     Instruction ins;
 
     std::uint16_t half = mem.read<std::uint16_t>(pc);
+    if (half == 0)
+    {
+        return ins;
+    }
+
     bool compressed = (half & bit_mask(2)) != bit_mask(2);
 
     ins.raw = half;
@@ -229,7 +230,7 @@ void CPU::execute_instruction(const Instruction &ins)
 
     auto &reg = general_registers;
 
-    bool is_branch = (ins.op_group == OpGroup::Branch) || (ins.op_group == OpGroup::Jal) || (ins.op_group == OpGroup::Jalr);
+    bool is_branch = (ins.opgroup == OpGroup::Branch) || (ins.opgroup == OpGroup::Jal) || (ins.opgroup == OpGroup::Jalr);
     bool increment_pc = !is_branch;
 
     switch (ins.op)
@@ -388,7 +389,7 @@ int CPU::get_mhz()
         return 0;
     }
 
-    double mhz = (static_cast<double>(executed_instructions) / elapsed_time) * 1000.0;
+    double mhz = static_cast<double>(executed_instructions) / elapsed_time;
     return static_cast<int>(mhz);
 }
 

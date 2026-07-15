@@ -25,11 +25,18 @@ int main(int argc, char **argv)
     cpu->warm();
     cpu->write_mem(0, buffer.data(), buffer.size());
 
-    for (int i = 0; i < 100; ++i)
+    Instruction ins;
+    for (int i = 0; i < 100000; ++i)
     {
         cpu->reset(false);
+
         Instruction ins = cpu->fetch_instruction();
-        cpu->execute_instruction(ins);
+
+        while (ins.op != OpCode::NA)
+        {
+            cpu->execute_instruction(ins);
+            ins = cpu->fetch_instruction();
+        }
     }
 
     // Dump the first 16 bytes of memory for debugging

@@ -26,7 +26,7 @@ int main(int argc, char **argv)
     cpu->write_mem(0, buffer.data(), buffer.size());
 
     Instruction ins;
-    for (int i = 0; i < 100000; ++i)
+    for (int i = 0; i < 1000000; ++i)
     {
         cpu->reset(false);
 

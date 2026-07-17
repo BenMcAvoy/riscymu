@@ -7,13 +7,12 @@
 #include <print>
 #include <magic_enum.hpp>
 
-constexpr std::size_t kRegisterCount = 32;
-
 CPU::CPU()
 {
     general_registers.fill(0);
     pc = 0;
     executed_instructions = 0;
+    start_time = std::chrono::high_resolution_clock::now();
 }
 
 void CPU::fetch_half_instruction(Instruction &ins, std::int16_t half) const
@@ -84,52 +83,39 @@ void CPU::decode_full_j_type(Instruction &ins, std::int32_t full) const
     ins.imm = sign_extend(imm, 21);
 }
 
-void CPU::decode_full_opcode(Instruction &ins, std::int32_t full, OpGroup opgroup) const
+execute_t CPU::decode_full_opcode(Instruction &ins, std::int32_t full, OpGroup opgroup) const
 {
     switch (opgroup)
     {
     case OpGroup::Op:
-        decode_full_op(ins);
-        break;
+        return decode_full_op(ins);
     case OpGroup::OpImm:
-        decode_full_op_imm(ins);
-        break;
+        return decode_full_op_imm(ins);
     case OpGroup::Load:
-        decode_full_load(ins);
-        break;
+        return decode_full_load(ins);
     case OpGroup::Store:
-        decode_full_store(ins);
-        break;
+        return decode_full_store(ins);
     case OpGroup::Branch:
-        decode_full_branch(ins);
-        break;
+        return decode_full_branch(ins);
     case OpGroup::Jal:
-        decode_full_jal(ins);
-        break;
+        return decode_full_jal(ins);
     case OpGroup::Jalr:
-        decode_full_jalr(ins);
-        break;
+        return decode_full_jalr(ins);
     case OpGroup::Lui:
-        decode_full_lui(ins);
-        break;
+        return decode_full_lui(ins);
     case OpGroup::Auipc:
-        decode_full_auipc(ins);
-        break;
+        return decode_full_auipc(ins);
     case OpGroup::EType:
-        decode_full_etype(ins);
-        break;
+        return decode_full_etype(ins);
     case OpGroup::Fence:
-        decode_full_fence(ins);
-        break;
+        return decode_full_fence(ins);
     }
 }
 
-void CPU::fetch_full_instruction(Instruction &ins, std::int32_t full) const
+__forceinline void CPU::fetch_full_instruction(Instruction &ins, std::int32_t full)
 {
     OpGroup opgroup = static_cast<OpGroup>(extract_opcode(full));
     ins.opgroup = opgroup;
-
-    // std::println("Fetched instruction: 0x{:08x}, opgroup: 0x{:02x}", full, static_cast<std::underlying_type_t<OpGroup>>(opgroup));
 
     switch (opgroup)
     {
@@ -181,21 +167,26 @@ void CPU::fetch_full_instruction(Instruction &ins, std::int32_t full) const
         throw std::runtime_error("Unsupported instruction format");
     }
 
-    decode_full_opcode(ins, full, opgroup);
-}
+    // fetch calls execute temporary.
+    (this->*decode_full_opcode(ins, full, opgroup))(ins);
 
-Instruction CPU::fetch_instruction() const
-{
-    if (start_time.time_since_epoch().count() == 0)
+    bool is_branch = (opgroup == OpGroup::Branch) || (opgroup == OpGroup::Jal) || (opgroup == OpGroup::Jalr);
+    if (!is_branch)
     {
-        start_time = std::chrono::high_resolution_clock::now();
+        pc += ins.length;
     }
 
+    executed_instructions++;
+}
+
+Instruction CPU::fetch_instruction()
+{
     Instruction ins;
 
     std::uint16_t half = mem.read<std::uint16_t>(pc);
-    if (half == 0)
+    if (half == 0) [[unlikely]]
     {
+        ins.op = OpCode::NA;
         return ins;
     }
 
@@ -204,20 +195,15 @@ Instruction CPU::fetch_instruction() const
     ins.raw = half;
     ins.length = compressed ? 2 : 4;
 
-    if (!compressed)
-    {
-        std::uint16_t half2 = mem.read<std::uint16_t>(pc + 2);
-        ins.raw |= (half2 << 16);
-    }
-
-    if (compressed)
+    if (compressed) [[unlikely]]
     {
         fetch_half_instruction(ins, half);
     }
     else
     {
         std::uint16_t half2 = mem.read<std::uint16_t>(pc + 2);
-        fetch_full_instruction(ins, half | (half2 << 16));
+        ins.raw |= (half2 << 16);
+        fetch_full_instruction(ins, ins.raw);
     }
 
     return ins;
@@ -225,6 +211,8 @@ Instruction CPU::fetch_instruction() const
 
 void CPU::execute_instruction(const Instruction &ins)
 {
+    return;
+
 #define get(idx) get_register(static_cast<RegisterIdx>(idx))
 #define set(idx, value) set_register(static_cast<RegisterIdx>(idx), value)
 
@@ -384,11 +372,6 @@ int CPU::get_mhz()
     auto current_time = std::chrono::high_resolution_clock::now();
     auto elapsed_time = std::chrono::duration_cast<std::chrono::microseconds>(current_time - start_time).count();
 
-    if (elapsed_time == 0)
-    {
-        return 0;
-    }
-
     double mhz = static_cast<double>(executed_instructions) / elapsed_time;
     return static_cast<int>(mhz);
 }
@@ -410,68 +393,264 @@ void CPU::reset(bool reset_instrumentation)
     }
 }
 
-void CPU::decode_full_op(Instruction &ins) const
+execute_t CPU::decode_full_op(Instruction &ins) const
 {
     auto funct3 = extract_funct3(ins.raw);
     auto funct7 = extract_funct7(ins.raw);
 
     auto idx = (funct7 << 3) | funct3;
-    ins.op = op_table[idx];
+    return op_table[idx];
 }
 
-void CPU::decode_full_op_imm(Instruction &ins) const
+execute_t CPU::decode_full_op_imm(Instruction &ins) const
 {
     auto funct3 = extract_funct3(ins.raw);
     auto imm_11_5 = ins.imm >> 5; // Extract bits 11:5 from the immediate value
 
     auto idx = (imm_11_5 << 3) | funct3;
-    ins.op = op_imm_table[idx];
+    return op_imm_table[idx];
 }
 
-void CPU::decode_full_load(Instruction &ins) const
+execute_t CPU::decode_full_load(Instruction &ins) const
 {
     auto funct3 = extract_funct3(ins.raw);
-    ins.op = load_table[funct3];
+    return load_table[funct3];
 }
 
-void CPU::decode_full_store(Instruction &ins) const
+execute_t CPU::decode_full_store(Instruction &ins) const
 {
     auto funct3 = extract_funct3(ins.raw);
-    ins.op = store_table[funct3];
+    return store_table[funct3];
 }
 
-void CPU::decode_full_branch(Instruction &ins) const
+execute_t CPU::decode_full_branch(Instruction &ins) const
 {
     auto funct3 = extract_funct3(ins.raw);
-    ins.op = branch_table[funct3];
+    return branch_table[funct3];
 }
 
-void CPU::decode_full_jal(Instruction &ins) const
+execute_t CPU::decode_full_jal(Instruction &ins) const
 {
-    ins.op = jal_table[0];
+    return jal_table[0];
 }
 
-void CPU::decode_full_jalr(Instruction &ins) const
+execute_t CPU::decode_full_jalr(Instruction &ins) const
 {
-    ins.op = jalr_table[0];
+    return jalr_table[0];
 }
 
-void CPU::decode_full_lui(Instruction &ins) const
+execute_t CPU::decode_full_lui(Instruction &ins) const
 {
-    ins.op = lui_table[0];
+    return lui_table[0];
 }
 
-void CPU::decode_full_auipc(Instruction &ins) const
+execute_t CPU::decode_full_auipc(Instruction &ins) const
 {
-    ins.op = auipc_table[0];
+    return auipc_table[0];
 }
 
-void CPU::decode_full_etype(Instruction &ins) const
+execute_t CPU::decode_full_etype(Instruction &ins) const
 {
-    ins.op = etype_table[ins.imm];
+    return etype_table[ins.imm];
 }
 
-void CPU::decode_full_fence(Instruction &ins) const
+execute_t CPU::decode_full_fence(Instruction &ins) const
 {
-    ins.op = fence_table[0];
+    return fence_table[0];
 }
+
+#define get(idx) get_register(static_cast<RegisterIdx>(idx))
+#define set(idx, value) set_register(static_cast<RegisterIdx>(idx), value)
+void CPU::execute_add(Instruction &ins)
+{
+    ins.op = OpCode::Add;
+    set(ins.rd, get(ins.rs1) + get(ins.rs2));
+}
+void CPU::execute_sub(Instruction &ins)
+{
+    ins.op = OpCode::Sub;
+    set(ins.rd, get(ins.rs1) - get(ins.rs2));
+}
+void CPU::execute_xor(Instruction &ins)
+{
+    ins.op = OpCode::Xor;
+    set(ins.rd, get(ins.rs1) ^ get(ins.rs2));
+}
+void CPU::execute_or(Instruction &ins)
+{
+    ins.op = OpCode::Or;
+    set(ins.rd, get(ins.rs1) | get(ins.rs2));
+}
+void CPU::execute_and(Instruction &ins)
+{
+    ins.op = OpCode::And;
+    set(ins.rd, get(ins.rs1) & get(ins.rs2));
+}
+void CPU::execute_sll(Instruction &ins)
+{
+    ins.op = OpCode::Sll;
+    set(ins.rd, get(ins.rs1) << get(ins.rs2));
+}
+void CPU::execute_srl(Instruction &ins)
+{
+    ins.op = OpCode::Srl;
+    set(ins.rd, get(ins.rs1) >> get(ins.rs2));
+}
+void CPU::execute_sra(Instruction &ins)
+{
+    ins.op = OpCode::Sra;
+    set(ins.rd, static_cast<std::int64_t>(get(ins.rs1)) >> get(ins.rs2));
+}
+void CPU::execute_slt(Instruction &ins)
+{
+    ins.op = OpCode::Slt;
+    set(ins.rd, static_cast<std::int64_t>(get(ins.rs1)) < static_cast<std::int64_t>(get(ins.rs2)) ? 1 : 0);
+}
+void CPU::execute_sltu(Instruction &ins)
+{
+    ins.op = OpCode::Sltu;
+    set(ins.rd, get(ins.rs1) < get(ins.rs2) ? 1 : 0);
+}
+void CPU::execute_addi(Instruction &ins)
+{
+    ins.op = OpCode::Addi;
+    set(ins.rd, get(ins.rs1) + ins.imm);
+}
+void CPU::execute_xori(Instruction &ins)
+{
+    ins.op = OpCode::Xori;
+    set(ins.rd, get(ins.rs1) ^ ins.imm);
+}
+void CPU::execute_ori(Instruction &ins)
+{
+    ins.op = OpCode::Ori;
+    set(ins.rd, get(ins.rs1) | ins.imm);
+}
+void CPU::execute_andi(Instruction &ins)
+{
+    ins.op = OpCode::Andi;
+    set(ins.rd, get(ins.rs1) & ins.imm);
+}
+void CPU::execute_slli(Instruction &ins)
+{
+    ins.op = OpCode::Slli;
+    set(ins.rd, get(ins.rs1) << ins.imm);
+}
+void CPU::execute_srli(Instruction &ins)
+{
+    ins.op = OpCode::Srli;
+    set(ins.rd, get(ins.rs1) >> ins.imm);
+}
+void CPU::execute_srai(Instruction &ins)
+{
+    ins.op = OpCode::Srai;
+    set(ins.rd, static_cast<std::int64_t>(get(ins.rs1)) >> ins.imm);
+}
+void CPU::execute_slti(Instruction &ins)
+{
+    ins.op = OpCode::Slti;
+    set(ins.rd, static_cast<std::int64_t>(get(ins.rs1)) < static_cast<std::int64_t>(ins.imm) ? 1 : 0);
+}
+void CPU::execute_sltiu(Instruction &ins)
+{
+    ins.op = OpCode::Sltiu;
+    set(ins.rd, get(ins.rs1) < static_cast<uint64_t>(ins.imm) ? 1 : 0);
+}
+void CPU::execute_lb(Instruction &ins)
+{
+    ins.op = OpCode::Lb;
+    set(ins.rd, mem.read<std::int8_t>(get(ins.rs1) + ins.imm));
+}
+void CPU::execute_lh(Instruction &ins)
+{
+    ins.op = OpCode::Lh;
+    set(ins.rd, mem.read<std::int16_t>(get(ins.rs1) + ins.imm));
+}
+void CPU::execute_lw(Instruction &ins)
+{
+    ins.op = OpCode::Lw;
+    set(ins.rd, mem.read<std::int32_t>(get(ins.rs1) + ins.imm));
+}
+void CPU::execute_lbu(Instruction &ins)
+{
+    ins.op = OpCode::Lbu;
+    set(ins.rd, mem.read<std::uint8_t>(get(ins.rs1) + ins.imm));
+}
+void CPU::execute_lhu(Instruction &ins)
+{
+    ins.op = OpCode::Lhu;
+    set(ins.rd, mem.read<std::uint16_t>(get(ins.rs1) + ins.imm));
+}
+void CPU::execute_sb(Instruction &ins)
+{
+    ins.op = OpCode::Sb;
+    mem.write<std::uint8_t>(get(ins.rs1) + ins.imm, get(ins.rs2));
+}
+void CPU::execute_sh(Instruction &ins)
+{
+    ins.op = OpCode::Sh;
+    mem.write<std::uint16_t>(get(ins.rs1) + ins.imm, get(ins.rs2));
+}
+void CPU::execute_sw(Instruction &ins)
+{
+    ins.op = OpCode::Sw;
+    mem.write<std::uint32_t>(get(ins.rs1) + ins.imm, get(ins.rs2));
+}
+void CPU::execute_beq(Instruction &ins)
+{
+    ins.op = OpCode::Beq;
+    pc += (get(ins.rs1) == get(ins.rs2)) ? ins.imm : ins.length;
+}
+void CPU::execute_bne(Instruction &ins)
+{
+    ins.op = OpCode::Bne;
+    pc += (get(ins.rs1) != get(ins.rs2)) ? ins.imm : ins.length;
+}
+void CPU::execute_blt(Instruction &ins)
+{
+    ins.op = OpCode::Blt;
+    pc += (static_cast<std::int64_t>(get(ins.rs1)) < static_cast<std::int64_t>(get(ins.rs2))) ? ins.imm : ins.length;
+}
+void CPU::execute_bge(Instruction &ins)
+{
+    ins.op = OpCode::Bge;
+    pc += (static_cast<std::int64_t>(get(ins.rs1)) >= static_cast<std::int64_t>(get(ins.rs2))) ? ins.imm : ins.length;
+}
+void CPU::execute_bltu(Instruction &ins)
+{
+    ins.op = OpCode::Bltu;
+    pc += (get(ins.rs1) < get(ins.rs2)) ? ins.imm : ins.length;
+}
+void CPU::execute_bgeu(Instruction &ins)
+{
+    ins.op = OpCode::Bgeu;
+    pc += (get(ins.rs1) >= get(ins.rs2)) ? ins.imm : ins.length;
+}
+void CPU::execute_jal(Instruction &ins)
+{
+    ins.op = OpCode::Jal;
+    set(ins.rd, pc + 4);
+    pc += ins.imm;
+}
+void CPU::execute_jalr(Instruction &ins)
+{
+    ins.op = OpCode::Jalr;
+    set(ins.rd, pc + 4);
+    pc = (get(ins.rs1) + ins.imm) & ~1ULL;
+}
+void CPU::execute_lui(Instruction &ins)
+{
+    ins.op = OpCode::Lui;
+    set(ins.rd, ins.imm);
+}
+void CPU::execute_auipc(Instruction &ins)
+{
+    ins.op = OpCode::Auipc;
+    set(ins.rd, pc + ins.imm);
+}
+void CPU::execute_ecall(Instruction &ins) { ins.op = OpCode::Ecall; }
+void CPU::execute_ebreak(Instruction &ins) { ins.op = OpCode::Ebreak; }
+void CPU::execute_fence(Instruction &ins) { ins.op = OpCode::Fence; }
+void CPU::execute_na(Instruction &ins) {}
+#undef get
+#undef set

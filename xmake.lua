@@ -1,4 +1,5 @@
 add_rules("mode.debug", "mode.release")
+set_policy("build.optimization.lto", true)
 
 add_requires("magic_enum")
 
@@ -10,9 +11,7 @@ target("riscymu")
     set_rundir("$(projectdir)")
     add_packages("magic_enum")
 
-if is_mode("debug") then
-    set_symbols("debug")
-end
+set_symbols("debug")
 
 -- check for windows
 if is_plat("windows") then

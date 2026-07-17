@@ -1,213 +1,220 @@
 #pragma once
 
 #include <array>
+
 #include "ins.h"
 #include "helpers.h"
 
-namespace
+#include "cpu.h"
+
+struct CPUAccessor
 {
-    constexpr auto make_op_table()
+    static constexpr auto make_op_table()
     {
-#define MAP(funct3, funct7, opcode) map[(funct7 << 3) | funct3] = OpCode::opcode;
+#define MAP(funct3, funct7, handler) map[(funct7 << 3) | funct3] = handler;
         constexpr std::size_t kFunctBits = 7 + 3;
         constexpr std::size_t kTableSize = 1 << kFunctBits;
 
-        std::array<OpCode, kTableSize> map{};
-        map.fill(OpCode::NA);
+        std::array<execute_t, kTableSize> map{};
+        map.fill(&CPU::execute_na);
 
-        MAP(0x00, 0x00, Add);
-        MAP(0x00, 0x20, Sub);
+        MAP(0x00, 0x00, &CPU::execute_add);
+        MAP(0x00, 0x20, &CPU::execute_sub);
 
-        MAP(0x04, 0x00, Xor);
-        MAP(0x06, 0x00, Or);
-        MAP(0x07, 0x00, And);
+        MAP(0x04, 0x00, &CPU::execute_xor);
+        MAP(0x06, 0x00, &CPU::execute_or);
+        MAP(0x07, 0x00, &CPU::execute_and);
 
-        MAP(0x01, 0x00, Sll);
-        MAP(0x05, 0x00, Srl);
-        MAP(0x05, 0x20, Sra);
-        MAP(0x02, 0x00, Slt);
-        MAP(0x03, 0x00, Sltu);
+        MAP(0x01, 0x00, &CPU::execute_sll);
+        MAP(0x05, 0x00, &CPU::execute_srl);
+        MAP(0x05, 0x20, &CPU::execute_sra);
+        MAP(0x02, 0x00, &CPU::execute_slt);
+        MAP(0x03, 0x00, &CPU::execute_sltu);
 
         return map;
 #undef MAP
     }
 
-    constexpr auto make_op_imm_table()
+    static constexpr auto make_op_imm_table()
     {
 // key to table should be funct3 + imm[11:5] (7 bits)
-// [ imm[11:5], funct3] -> OpCode
-#define MAP_DISCRIMINATED(funct3, imm_11_5, opcode) map[(imm_11_5 << 3) | funct3] = OpCode::opcode;
+// [ imm[11:5], funct3] -> execute_t
+#define MAP_DISCRIMINATED(funct3, imm_11_5, handler) map[(imm_11_5 << 3) | funct3] = handler;
 
 // to have no discriminator we must fill every possible combination of imm[11:5] in the table to ensure they are all populated
-#define MAP_UNDISCRIMINATED(funct3, opcode)                     \
+#define MAP_UNDISCRIMINATED(funct3, handler)                    \
     for (std::uint8_t imm_11_5 = 0; imm_11_5 < 128; ++imm_11_5) \
     {                                                           \
-        map[(imm_11_5 << 3) | funct3] = OpCode::opcode;         \
+        map[(imm_11_5 << 3) | funct3] = handler;                \
     }
 
         constexpr std::size_t kFunctBits = 3;
         constexpr std::size_t kImmDiscriminatorBits = 7; // (imm[11:5] for slli,srli,srai)
         constexpr std::size_t kTableSize = 1 << (kFunctBits + kImmDiscriminatorBits);
 
-        std::array<OpCode, kTableSize> map{};
-        map.fill(OpCode::NA);
+        std::array<execute_t, kTableSize> map{};
+        map.fill(&CPU::execute_na);
 
-        MAP_UNDISCRIMINATED(0x00, Addi);
-        MAP_UNDISCRIMINATED(0x04, Xori);
-        MAP_UNDISCRIMINATED(0x06, Ori);
-        MAP_UNDISCRIMINATED(0x07, Andi);
+        MAP_UNDISCRIMINATED(0x00, &CPU::execute_addi);
+        MAP_UNDISCRIMINATED(0x04, &CPU::execute_xori);
+        MAP_UNDISCRIMINATED(0x06, &CPU::execute_ori);
+        MAP_UNDISCRIMINATED(0x07, &CPU::execute_andi);
 
-        MAP_DISCRIMINATED(0x01, 0x00, Slli);
-        MAP_DISCRIMINATED(0x05, 0x00, Srli);
-        MAP_DISCRIMINATED(0x05, 0x20, Srai);
+        MAP_DISCRIMINATED(0x01, 0x00, &CPU::execute_slli);
+        MAP_DISCRIMINATED(0x05, 0x00, &CPU::execute_srli);
+        MAP_DISCRIMINATED(0x05, 0x20, &CPU::execute_srai);
 
-        MAP_UNDISCRIMINATED(0x02, Slti);
-        MAP_UNDISCRIMINATED(0x03, Sltiu);
+        MAP_UNDISCRIMINATED(0x02, &CPU::execute_slti);
+        MAP_UNDISCRIMINATED(0x03, &CPU::execute_sltiu);
 
         return map;
 #undef MAP_DISCRIMINATED
-#undef MAP_UNDIMINISCRATED
+#undef MAP_UNDISCRIMINATED
     }
 
-    constexpr auto make_load_table()
+    static constexpr auto make_load_table()
     {
-#define MAP(funct3, opcode) map[funct3] = OpCode::opcode;
+#define MAP(funct3, handler) map[funct3] = handler;
         constexpr std::size_t kFunctBits = 3;
         constexpr std::size_t kTableSize = 1 << kFunctBits;
-        std::array<OpCode, kTableSize> map{};
-        map.fill(OpCode::NA);
+        std::array<execute_t, kTableSize> map{};
+        map.fill(&CPU::execute_na);
 
-        MAP(0x00, Lb);
-        MAP(0x01, Lh);
-        MAP(0x02, Lw);
-        MAP(0x04, Lbu);
-        MAP(0x05, Lhu);
+        MAP(0x00, &CPU::execute_lb);
+        MAP(0x01, &CPU::execute_lh);
+        MAP(0x02, &CPU::execute_lw);
+        MAP(0x04, &CPU::execute_lbu);
+        MAP(0x05, &CPU::execute_lhu);
 
         return map;
 #undef MAP
     }
 
-    constexpr auto make_store_table()
+    static constexpr auto make_store_table()
     {
-#define MAP(funct3, opcode) map[funct3] = OpCode::opcode;
+#define MAP(funct3, handler) map[funct3] = handler;
         constexpr std::size_t kFunctBits = 3;
         constexpr std::size_t kTableSize = 1 << kFunctBits;
-        std::array<OpCode, kTableSize> map{};
-        map.fill(OpCode::NA);
+        std::array<execute_t, kTableSize> map{};
+        map.fill(&CPU::execute_na);
 
-        MAP(0x00, Sb);
-        MAP(0x01, Sh);
-        MAP(0x02, Sw);
+        MAP(0x00, &CPU::execute_sb);
+        MAP(0x01, &CPU::execute_sh);
+        MAP(0x02, &CPU::execute_sw);
 
         return map;
 #undef MAP
     }
 
-    constexpr auto make_branch_table()
+    static constexpr auto make_branch_table()
     {
-#define MAP(funct3, opcode) map[funct3] = OpCode::opcode;
+#define MAP(funct3, handler) map[funct3] = handler;
         constexpr std::size_t kFunctBits = 3;
         constexpr std::size_t kTableSize = 1 << kFunctBits;
-        std::array<OpCode, kTableSize> map{};
-        map.fill(OpCode::NA);
+        std::array<execute_t, kTableSize> map{};
+        map.fill(&CPU::execute_na);
 
-        MAP(0x00, Beq);
-        MAP(0x01, Bne);
-        MAP(0x04, Blt);
-        MAP(0x05, Bge);
-        MAP(0x06, Bltu);
-        MAP(0x07, Bgeu);
+        MAP(0x00, &CPU::execute_beq);
+        MAP(0x01, &CPU::execute_bne);
+        MAP(0x04, &CPU::execute_blt);
+        MAP(0x05, &CPU::execute_bge);
+        MAP(0x06, &CPU::execute_bltu);
+        MAP(0x07, &CPU::execute_bgeu);
 
         return map;
 #undef MAP
     }
 
-    constexpr auto make_jal_table()
+    static constexpr auto make_jal_table()
     {
-        std::array<OpCode, 1> map{};
-        map.fill(OpCode::Jal);
+        std::array<execute_t, 1> map{};
+        map.fill(&CPU::execute_jal);
         return map;
     }
 
-    constexpr auto make_jalr_table()
+    static constexpr auto make_jalr_table()
     {
-        std::array<OpCode, 1> map{};
-        map.fill(OpCode::Jalr);
+        std::array<execute_t, 1> map{};
+        map.fill(&CPU::execute_jalr);
         return map;
     }
 
-    constexpr auto make_lui_table()
+    static constexpr auto make_lui_table()
     {
-        std::array<OpCode, 1> map{};
-        map.fill(OpCode::Lui);
+        std::array<execute_t, 1> map{};
+        map.fill(&CPU::execute_lui);
         return map;
     }
 
-    constexpr auto make_auipc_table()
+    static constexpr auto make_auipc_table()
     {
-        std::array<OpCode, 1> map{};
-        map.fill(OpCode::Auipc);
+        std::array<execute_t, 1> map{};
+        map.fill(&CPU::execute_auipc);
         return map;
     }
 
-    constexpr auto make_etype_table()
+    static constexpr auto make_etype_table()
     {
-#define MAP(imm, opcode) map[imm] = OpCode::opcode;
+#define MAP(imm, handler) map[imm] = handler;
+        std::array<execute_t, 2> map{};
+        map.fill(&CPU::execute_na);
 
-        std::array<OpCode, 2> map{};
-        MAP(0, Ecall);
-        MAP(1, Ebreak);
+        MAP(0, &CPU::execute_ecall);
+        MAP(1, &CPU::execute_ebreak);
+
         return map;
-
 #undef MAP
     }
 
-    constexpr auto make_fence_table()
+    static constexpr auto make_fence_table()
     {
-        std::array<OpCode, 1> map{};
-        map.fill(OpCode::Fence);
+        std::array<execute_t, 1> map{};
+        map.fill(&CPU::execute_fence);
         return map;
     }
-}
+};
 
-alignas(64) static inline constexpr auto op_table = make_op_table();
-alignas(64) static inline constexpr auto op_imm_table = make_op_imm_table();
-alignas(64) static inline constexpr auto load_table = make_load_table();
-alignas(64) static inline constexpr auto store_table = make_store_table();
-alignas(64) static inline constexpr auto branch_table = make_branch_table();
-alignas(64) static inline constexpr auto jal_table = make_jal_table();
-alignas(64) static inline constexpr auto jalr_table = make_jalr_table();
-alignas(64) static inline constexpr auto lui_table = make_lui_table();
-alignas(64) static inline constexpr auto auipc_table = make_auipc_table();
-alignas(64) static inline constexpr auto etype_table = make_etype_table();
-alignas(64) static inline constexpr auto fence_table = make_fence_table();
-
-void warm_tables()
+namespace
 {
-    volatile OpCode dummy{};
+    alignas(64) inline constexpr auto op_table = CPUAccessor::make_op_table();
+    alignas(64) inline constexpr auto op_imm_table = CPUAccessor::make_op_imm_table();
+    alignas(64) inline constexpr auto load_table = CPUAccessor::make_load_table();
+    alignas(64) inline constexpr auto store_table = CPUAccessor::make_store_table();
+    alignas(64) inline constexpr auto branch_table = CPUAccessor::make_branch_table();
+    alignas(64) inline constexpr auto jal_table = CPUAccessor::make_jal_table();
+    alignas(64) inline constexpr auto jalr_table = CPUAccessor::make_jalr_table();
+    alignas(64) inline constexpr auto lui_table = CPUAccessor::make_lui_table();
+    alignas(64) inline constexpr auto auipc_table = CPUAccessor::make_auipc_table();
+    alignas(64) inline constexpr auto etype_table = CPUAccessor::make_etype_table();
+    alignas(64) inline constexpr auto fence_table = CPUAccessor::make_fence_table();
 
-    for (auto v : op_table)
-        dummy = v;
-    for (auto v : op_imm_table)
-        dummy = v;
-    for (auto v : load_table)
-        dummy = v;
-    for (auto v : store_table)
-        dummy = v;
-    for (auto v : branch_table)
-        dummy = v;
-    for (auto v : jal_table)
-        dummy = v;
-    for (auto v : jalr_table)
-        dummy = v;
-    for (auto v : lui_table)
-        dummy = v;
-    for (auto v : auipc_table)
-        dummy = v;
-    for (auto v : etype_table)
-        dummy = v;
-    for (auto v : fence_table)
-        dummy = v;
+    void warm_tables()
+    {
+        volatile execute_t dummy{};
 
-    (void)dummy;
+        for (auto v : op_table)
+            dummy = v;
+        for (auto v : op_imm_table)
+            dummy = v;
+        for (auto v : load_table)
+            dummy = v;
+        for (auto v : store_table)
+            dummy = v;
+        for (auto v : branch_table)
+            dummy = v;
+        for (auto v : jal_table)
+            dummy = v;
+        for (auto v : jalr_table)
+            dummy = v;
+        for (auto v : lui_table)
+            dummy = v;
+        for (auto v : auipc_table)
+            dummy = v;
+        for (auto v : etype_table)
+            dummy = v;
+        for (auto v : fence_table)
+            dummy = v;
+
+        (void)dummy;
+    }
 }

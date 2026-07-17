@@ -6,6 +6,8 @@
 #include "ins.h"
 #include "mem.h"
 
+struct CPUAccessor;
+
 // Helper function to index registers
 enum class RegisterIdx
 {
@@ -77,12 +79,15 @@ enum class RegisterIdx
     T6 = 31,
 };
 
+class CPU;
+using execute_t = void (CPU::*)(Instruction &);
+
 class CPU
 {
 public:
     CPU();
 
-    Instruction fetch_instruction() const;
+    Instruction fetch_instruction();
 
     void write_mem(std::uint64_t addr, const void *data, std::size_t size)
     {
@@ -95,12 +100,12 @@ public:
         return mem.read<T>(addr);
     }
 
-    std::uint64_t get_register(RegisterIdx idx)
+    inline std::uint64_t get_register(RegisterIdx idx)
     {
         return general_registers[static_cast<std::size_t>(idx)];
     }
 
-    void set_register(RegisterIdx idx, std::uint64_t value)
+    inline void set_register(RegisterIdx idx, std::uint64_t value)
     {
         if (idx == RegisterIdx::Zero)
         {
@@ -137,25 +142,118 @@ private:
     void decode_full_u_type(Instruction &ins, std::int32_t full) const;
     void decode_full_j_type(Instruction &ins, std::int32_t full) const;
 
-    void decode_full_opcode(Instruction &ins, std::int32_t full, OpGroup opgroup) const;
+    execute_t decode_full_opcode(Instruction &ins, std::int32_t full, OpGroup opgroup) const;
 
-    void decode_full_op(Instruction &ins) const;
-    void decode_full_op_imm(Instruction &ins) const;
-    void decode_full_load(Instruction &ins) const;
-    void decode_full_store(Instruction &ins) const;
-    void decode_full_branch(Instruction &ins) const;
-    void decode_full_jal(Instruction &ins) const;
-    void decode_full_jalr(Instruction &ins) const;
-    void decode_full_auipc(Instruction &ins) const;
-    void decode_full_lui(Instruction &ins) const;
-    void decode_full_etype(Instruction &ins) const;
-    void decode_full_fence(Instruction &ins) const;
+protected:
+    execute_t decode_full_op(Instruction &ins) const;
+    execute_t decode_full_op_imm(Instruction &ins) const;
+    execute_t decode_full_load(Instruction &ins) const;
+    execute_t decode_full_store(Instruction &ins) const;
+    execute_t decode_full_branch(Instruction &ins) const;
+    execute_t decode_full_jal(Instruction &ins) const;
+    execute_t decode_full_jalr(Instruction &ins) const;
+    execute_t decode_full_auipc(Instruction &ins) const;
+    execute_t decode_full_lui(Instruction &ins) const;
+    execute_t decode_full_etype(Instruction &ins) const;
+    execute_t decode_full_fence(Instruction &ins) const;
 
-    void fetch_full_instruction(Instruction &ins, std::int32_t full) const;
+private:
+    void fetch_full_instruction(Instruction &ins, std::int32_t full);
     void fetch_half_instruction(Instruction &ins, std::int16_t half) const;
 
     int executed_instructions;
     mutable std::chrono::time_point<std::chrono::high_resolution_clock> start_time;
 
+protected:
+    void execute_add(Instruction &ins);
+    void execute_sub(Instruction &ins);
+    void execute_xor(Instruction &ins);
+    void execute_or(Instruction &ins);
+    void execute_and(Instruction &ins);
+    void execute_sll(Instruction &ins);
+    void execute_srl(Instruction &ins);
+    void execute_sra(Instruction &ins);
+    void execute_slt(Instruction &ins);
+    void execute_sltu(Instruction &ins);
+    void execute_addi(Instruction &ins);
+    void execute_xori(Instruction &ins);
+    void execute_ori(Instruction &ins);
+    void execute_andi(Instruction &ins);
+    void execute_slli(Instruction &ins);
+    void execute_srli(Instruction &ins);
+    void execute_srai(Instruction &ins);
+    void execute_slti(Instruction &ins);
+    void execute_sltiu(Instruction &ins);
+    void execute_lb(Instruction &ins);
+    void execute_lh(Instruction &ins);
+    void execute_lw(Instruction &ins);
+    void execute_lbu(Instruction &ins);
+    void execute_lhu(Instruction &ins);
+    void execute_sb(Instruction &ins);
+    void execute_sh(Instruction &ins);
+    void execute_sw(Instruction &ins);
+    void execute_beq(Instruction &ins);
+    void execute_bne(Instruction &ins);
+    void execute_blt(Instruction &ins);
+    void execute_bge(Instruction &ins);
+    void execute_bltu(Instruction &ins);
+    void execute_bgeu(Instruction &ins);
+    void execute_jal(Instruction &ins);
+    void execute_jalr(Instruction &ins);
+    void execute_lui(Instruction &ins);
+    void execute_auipc(Instruction &ins);
+    void execute_ecall(Instruction &ins);
+    void execute_ebreak(Instruction &ins);
+    void execute_fence(Instruction &ins);
+    void execute_na(Instruction &ins);
+
+private:
+    static constexpr auto execute_table = std::to_array<void (CPU::*)(Instruction &)>({
+        &CPU::execute_add,
+        &CPU::execute_sub,
+        &CPU::execute_xor,
+        &CPU::execute_or,
+        &CPU::execute_and,
+        &CPU::execute_sll,
+        &CPU::execute_srl,
+        &CPU::execute_sra,
+        &CPU::execute_slt,
+        &CPU::execute_sltu,
+        &CPU::execute_addi,
+        &CPU::execute_xori,
+        &CPU::execute_ori,
+        &CPU::execute_andi,
+        &CPU::execute_slli,
+        &CPU::execute_srli,
+        &CPU::execute_srai,
+        &CPU::execute_slti,
+        &CPU::execute_sltiu,
+        &CPU::execute_lb,
+        &CPU::execute_lh,
+        &CPU::execute_lw,
+        &CPU::execute_lbu,
+        &CPU::execute_lhu,
+        &CPU::execute_sb,
+        &CPU::execute_sh,
+        &CPU::execute_sw,
+        &CPU::execute_beq,
+        &CPU::execute_bne,
+        &CPU::execute_blt,
+        &CPU::execute_bge,
+        &CPU::execute_bltu,
+        &CPU::execute_bgeu,
+        &CPU::execute_jal,
+        &CPU::execute_jalr,
+        &CPU::execute_lui,
+        &CPU::execute_auipc,
+        &CPU::execute_ecall,
+        &CPU::execute_ebreak,
+        &CPU::execute_fence,
+        &CPU::execute_na,
+    });
+
     Mem<1024 * 1024> mem{}; // 1MB of memory
+
+    // from ts
+    friend CPUAccessor;
 };

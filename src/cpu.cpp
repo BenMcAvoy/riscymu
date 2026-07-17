@@ -10,79 +10,14 @@
 CPU::CPU()
 {
     general_registers.fill(0);
-    pc = 0;
     executed_instructions = 0;
+    pc = 0;
 }
 
 void CPU::step_half_instruction(std::uint16_t half)
 {
     throw std::runtime_error("C extension instructions are not supported yet");
 }
-
-/*
-void CPU::decode_full_r_type(Instruction &ins, std::int32_t full) const
-{
-    ins.format = Format::R;
-    ins.rd = extract_rd(full);
-    ins.rs1 = extract_rs1(full);
-    ins.rs2 = extract_rs2(full);
-}
-void CPU::decode_full_i_type(Instruction &ins, std::int32_t full) const
-{
-    ins.format = Format::I;
-    ins.rd = extract_rd(full);
-    ins.rs1 = extract_rs1(full);
-    ins.imm = sign_extend(extract(full, 20, 31), 12);
-}
-void CPU::decode_full_s_type(Instruction &ins, std::int32_t full) const
-{
-    ins.format = Format::S;
-    ins.rs1 = extract_rs1(full);
-    ins.rs2 = extract_rs2(full);
-
-    auto imm4_0 = extract(full, 7, 11);   // bits 11:7
-    auto imm11_5 = extract(full, 25, 31); // bits 31:25
-    auto imm = (imm11_5 << 5) | imm4_0;   // combine to get 12-bit immediate
-
-    ins.imm = sign_extend(imm, 12);
-}
-void CPU::decode_full_b_type(Instruction &ins, std::int32_t full) const
-{
-    ins.format = Format::B;
-
-    ins.rs1 = extract_rs1(full);
-    ins.rs2 = extract_rs2(full);
-
-    auto imm_1_4 = extract(full, 8, 11);
-    auto imm_5_10 = extract(full, 25, 30);
-    auto imm_11 = extract(full, 7);
-    auto imm_12 = extract(full, 31);
-    auto imm = (imm_12 << 12) | (imm_11 << 11) | (imm_5_10 << 5) | (imm_1_4 << 1);
-
-    ins.imm = sign_extend(imm, 13);
-}
-void CPU::decode_full_u_type(Instruction &ins, std::int32_t full) const
-{
-    ins.format = Format::U;
-    ins.rd = extract_rd(full);
-
-    auto imm = extract(full, 12, 31) << 12;
-    ins.imm = sign_extend(imm, 32);
-}
-void CPU::decode_full_j_type(Instruction &ins, std::int32_t full) const
-{
-    ins.format = Format::J;
-    ins.rd = extract_rd(full);
-
-    auto imm1_10 = extract(full, 21, 30);  // bits 30:21
-    auto imm11 = extract(full, 20);        // bit 20
-    auto imm12_19 = extract(full, 12, 19); // bits 19:12
-    auto imm20 = extract(full, 31);        // bit 31
-    auto imm = (imm20 << 20) | (imm12_19 << 12) | (imm11 << 11) | (imm1_10 << 1);
-
-    ins.imm = sign_extend(imm, 21);
-}
-*/
 
 execute_t CPU::get_instruction_handler(std::uint32_t ins) const
 {
@@ -119,15 +54,8 @@ void CPU::step_full_instruction(std::uint32_t full)
 {
     OpGroup opgroup = static_cast<OpGroup>(extract_opcode(full));
 
-    // fetch calls execute temporarily
     (this->*get_instruction_handler(full))(full);
-
-    bool is_branch = (opgroup == OpGroup::Branch) || (opgroup == OpGroup::Jal) || (opgroup == OpGroup::Jalr);
-    if (!is_branch)
-    {
-        // NOTE: always 4 in full handler, 2 in half handler
-        pc += 4;
-    }
+    pc += 4;
 
     executed_instructions++;
 }
@@ -483,7 +411,7 @@ void CPU::execute_beq(std::uint32_t ins)
     auto imm = sign_extend(extract_b_type_imm(ins), 13);
 
     // jump imm or 4 (default pc increment)
-    pc += (get(rs1) == get(rs2)) ? imm : 4;
+    pc += ((get(rs1) == get(rs2)) ? imm : 4) - 4;
 }
 void CPU::execute_bne(std::uint32_t ins)
 {
@@ -493,7 +421,7 @@ void CPU::execute_bne(std::uint32_t ins)
     auto imm = sign_extend(extract_b_type_imm(ins), 13);
 
     // jump imm or 4 (default pc increment)
-    pc += (get(rs1) != get(rs2)) ? imm : 4;
+    pc += ((get(rs1) != get(rs2)) ? imm : 4) - 4;
 }
 void CPU::execute_blt(std::uint32_t ins)
 {
@@ -503,7 +431,7 @@ void CPU::execute_blt(std::uint32_t ins)
     auto imm = sign_extend(extract_b_type_imm(ins), 13);
 
     // jump imm or 4 (default pc increment)
-    pc += (static_cast<std::int64_t>(get(rs1)) < static_cast<std::int64_t>(get(rs2))) ? imm : 4;
+    pc += ((static_cast<std::int64_t>(get(rs1)) < static_cast<std::int64_t>(get(rs2))) ? imm : 4) - 4;
 }
 void CPU::execute_bge(std::uint32_t ins)
 {
@@ -513,7 +441,7 @@ void CPU::execute_bge(std::uint32_t ins)
     auto imm = sign_extend(extract_b_type_imm(ins), 13);
 
     // jump imm or 4 (default pc increment)
-    pc += (static_cast<std::int64_t>(get(rs1)) >= static_cast<std::int64_t>(get(rs2))) ? imm : 4;
+    pc += ((static_cast<std::int64_t>(get(rs1)) >= static_cast<std::int64_t>(get(rs2))) ? imm : 4) - 4;
 }
 void CPU::execute_bltu(std::uint32_t ins)
 {
@@ -523,7 +451,7 @@ void CPU::execute_bltu(std::uint32_t ins)
     auto imm = sign_extend(extract_b_type_imm(ins), 13);
 
     // jump imm or 4 (default pc increment)
-    pc += (get(rs1) < get(rs2)) ? imm : 4;
+    pc += ((get(rs1) < get(rs2)) ? imm : 4) - 4;
 }
 void CPU::execute_bgeu(std::uint32_t ins)
 {
@@ -533,7 +461,7 @@ void CPU::execute_bgeu(std::uint32_t ins)
     auto imm = sign_extend(extract_b_type_imm(ins), 13);
 
     // jump imm or 4 (default pc increment)
-    pc += (get(rs1) >= get(rs2)) ? imm : 4;
+    pc += ((get(rs1) >= get(rs2)) ? imm : 4) - 4;
 }
 void CPU::execute_jal(std::uint32_t ins)
 {
@@ -542,7 +470,7 @@ void CPU::execute_jal(std::uint32_t ins)
     auto imm = sign_extend(extract_j_type_imm(ins), 21);
 
     set(rd, pc + 4);
-    pc += imm;
+    pc += imm - 4;
 }
 void CPU::execute_jalr(std::uint32_t ins)
 {
@@ -551,7 +479,7 @@ void CPU::execute_jalr(std::uint32_t ins)
     auto imm = sign_extend(extract_i_type_imm(ins), 12);
 
     set(rd, pc + 4);
-    pc = (get(rs1) + imm) & ~1ULL;
+    pc = ((get(rs1) + imm) & ~1ULL) - 4;
 }
 void CPU::execute_lui(std::uint32_t ins)
 {

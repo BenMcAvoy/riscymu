@@ -19,32 +19,20 @@ struct Mem
         return data_.data();
     }
 
-    void write(std::uint64_t addr, const void *data, std::size_t size)
+    inline void write(std::uint64_t addr, const void *data, std::size_t size) noexcept
     {
-        if (addr + size > Size)
-        {
-            throw std::out_of_range("Memory write out of bounds");
-        }
         std::memcpy(data_.data() + addr, data, size);
     }
 
     template <typename T>
-    void write(std::uint64_t addr, const T &data)
+    inline void write(std::uint64_t addr, const T &data) noexcept
     {
-        if (addr + sizeof(T) > Size)
-        {
-            throw std::out_of_range("Memory write out of bounds");
-        }
         std::memcpy(data_.data() + addr, &data, sizeof(T));
     }
 
     template <typename T>
-    T read(std::uint64_t addr) const
+    inline T read(std::uint64_t addr) const noexcept
     {
-        if (addr + sizeof(T) > Size)
-        {
-            throw std::out_of_range("Memory read out of bounds");
-        }
         T value;
         std::memcpy(&value, data_.data() + addr, sizeof(T));
         return value;

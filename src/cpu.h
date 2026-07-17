@@ -89,13 +89,13 @@ public:
 
     Instruction fetch_instruction();
 
-    void write_mem(std::uint64_t addr, const void *data, std::size_t size)
+    inline void write_mem(std::uint64_t addr, const void *data, std::size_t size)
     {
         mem.write(addr, data, size);
     }
 
     template <typename T>
-    T read_mem(std::uint64_t addr) const
+    inline T read_mem(std::uint64_t addr) const
     {
         return mem.read<T>(addr);
     }
@@ -127,6 +127,7 @@ public:
     void execute_instruction(const Instruction &ins);
 
     int get_mhz();
+
     void warm();
     void reset(bool reset_instrumentation = false);
 
@@ -142,29 +143,30 @@ private:
     void decode_full_u_type(Instruction &ins, std::int32_t full) const;
     void decode_full_j_type(Instruction &ins, std::int32_t full) const;
 
-    execute_t decode_full_opcode(Instruction &ins, std::int32_t full, OpGroup opgroup) const;
+    execute_t get_instruction_handler(Instruction &ins, std::uint32_t full, OpGroup opgroup) const;
 
-protected:
-    execute_t decode_full_op(Instruction &ins) const;
-    execute_t decode_full_op_imm(Instruction &ins) const;
-    execute_t decode_full_load(Instruction &ins) const;
-    execute_t decode_full_store(Instruction &ins) const;
-    execute_t decode_full_branch(Instruction &ins) const;
-    execute_t decode_full_jal(Instruction &ins) const;
-    execute_t decode_full_jalr(Instruction &ins) const;
-    execute_t decode_full_auipc(Instruction &ins) const;
-    execute_t decode_full_lui(Instruction &ins) const;
-    execute_t decode_full_etype(Instruction &ins) const;
-    execute_t decode_full_fence(Instruction &ins) const;
+    inline execute_t decode_full_op(Instruction &ins) const;
+    inline execute_t decode_full_op_imm(Instruction &ins) const;
+    inline execute_t decode_full_load(Instruction &ins) const;
+    inline execute_t decode_full_store(Instruction &ins) const;
+    inline execute_t decode_full_branch(Instruction &ins) const;
+    inline execute_t decode_full_jal(Instruction &ins) const;
+    inline execute_t decode_full_jalr(Instruction &ins) const;
+    inline execute_t decode_full_auipc(Instruction &ins) const;
+    inline execute_t decode_full_lui(Instruction &ins) const;
+    inline execute_t decode_full_etype(Instruction &ins) const;
+    inline execute_t decode_full_fence(Instruction &ins) const;
 
-private:
-    void fetch_full_instruction(Instruction &ins, std::int32_t full);
-    void fetch_half_instruction(Instruction &ins, std::int16_t half) const;
+    inline void fetch_full_instruction(Instruction &ins, std::uint32_t full);
+    inline void fetch_half_instruction(Instruction &ins, std::uint16_t half) const;
 
     int executed_instructions;
-    mutable std::chrono::time_point<std::chrono::high_resolution_clock> start_time;
+    std::chrono::time_point<std::chrono::high_resolution_clock> start_time;
 
 protected:
+    // Inlining won't help here
+    // we use a function pointer
+
     void execute_add(Instruction &ins);
     void execute_sub(Instruction &ins);
     void execute_xor(Instruction &ins);
@@ -208,52 +210,7 @@ protected:
     void execute_na(Instruction &ins);
 
 private:
-    static constexpr auto execute_table = std::to_array<void (CPU::*)(Instruction &)>({
-        &CPU::execute_add,
-        &CPU::execute_sub,
-        &CPU::execute_xor,
-        &CPU::execute_or,
-        &CPU::execute_and,
-        &CPU::execute_sll,
-        &CPU::execute_srl,
-        &CPU::execute_sra,
-        &CPU::execute_slt,
-        &CPU::execute_sltu,
-        &CPU::execute_addi,
-        &CPU::execute_xori,
-        &CPU::execute_ori,
-        &CPU::execute_andi,
-        &CPU::execute_slli,
-        &CPU::execute_srli,
-        &CPU::execute_srai,
-        &CPU::execute_slti,
-        &CPU::execute_sltiu,
-        &CPU::execute_lb,
-        &CPU::execute_lh,
-        &CPU::execute_lw,
-        &CPU::execute_lbu,
-        &CPU::execute_lhu,
-        &CPU::execute_sb,
-        &CPU::execute_sh,
-        &CPU::execute_sw,
-        &CPU::execute_beq,
-        &CPU::execute_bne,
-        &CPU::execute_blt,
-        &CPU::execute_bge,
-        &CPU::execute_bltu,
-        &CPU::execute_bgeu,
-        &CPU::execute_jal,
-        &CPU::execute_jalr,
-        &CPU::execute_lui,
-        &CPU::execute_auipc,
-        &CPU::execute_ecall,
-        &CPU::execute_ebreak,
-        &CPU::execute_fence,
-        &CPU::execute_na,
-    });
-
     Mem<1024 * 1024> mem{}; // 1MB of memory
 
-    // from ts
     friend CPUAccessor;
 };

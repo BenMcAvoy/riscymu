@@ -15,7 +15,7 @@ CPU::CPU()
     start_time = std::chrono::high_resolution_clock::now();
 }
 
-void CPU::fetch_half_instruction(Instruction &ins, std::int16_t half) const
+void CPU::fetch_half_instruction(Instruction &ins, std::uint16_t half) const
 {
     throw std::runtime_error("C extension instructions are not supported yet");
 }
@@ -83,7 +83,7 @@ void CPU::decode_full_j_type(Instruction &ins, std::int32_t full) const
     ins.imm = sign_extend(imm, 21);
 }
 
-execute_t CPU::decode_full_opcode(Instruction &ins, std::int32_t full, OpGroup opgroup) const
+execute_t CPU::get_instruction_handler(Instruction &ins, std::uint32_t full, OpGroup opgroup) const
 {
     switch (opgroup)
     {
@@ -112,7 +112,7 @@ execute_t CPU::decode_full_opcode(Instruction &ins, std::int32_t full, OpGroup o
     }
 }
 
-__forceinline void CPU::fetch_full_instruction(Instruction &ins, std::int32_t full)
+void CPU::fetch_full_instruction(Instruction &ins, std::uint32_t full)
 {
     OpGroup opgroup = static_cast<OpGroup>(extract_opcode(full));
     ins.opgroup = opgroup;
@@ -168,7 +168,7 @@ __forceinline void CPU::fetch_full_instruction(Instruction &ins, std::int32_t fu
     }
 
     // fetch calls execute temporary.
-    (this->*decode_full_opcode(ins, full, opgroup))(ins);
+    (this->*get_instruction_handler(ins, full, opgroup))(ins);
 
     bool is_branch = (opgroup == OpGroup::Branch) || (opgroup == OpGroup::Jal) || (opgroup == OpGroup::Jalr);
     if (!is_branch)

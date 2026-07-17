@@ -66,3 +66,40 @@ constexpr std::int64_t sign_extend(std::uint64_t value, std::size_t bits)
     std::uint64_t shift = 64 - bits;
     return static_cast<std::int64_t>(value << shift) >> shift;
 }
+
+constexpr std::uint16_t extract_i_type_imm(std::uint32_t instruction)
+{
+    return static_cast<std::uint16_t>(extract(instruction, 20, 31));
+}
+
+constexpr std::uint16_t extract_s_type_imm(std::uint32_t instruction)
+{
+    auto imm4_0 = extract(instruction, 7, 11);
+    auto imm11_5 = extract(instruction, 25, 31);
+    return static_cast<std::uint16_t>((imm11_5 << 5) | imm4_0);
+}
+
+constexpr std::uint16_t extract_b_type_imm(std::uint32_t instruction)
+{
+    auto imm_1_4 = extract(instruction, 8, 11);
+    auto imm_5_10 = extract(instruction, 25, 30);
+    auto imm_11 = extract(instruction, 7);
+    auto imm_12 = extract(instruction, 31);
+
+    return static_cast<std::uint16_t>((imm_12 << 12) | (imm_11 << 11) | (imm_5_10 << 5) | (imm_1_4 << 1));
+}
+
+constexpr std::uint32_t extract_u_type_imm(std::uint32_t instruction)
+{
+    return static_cast<std::uint32_t>(extract(instruction, 12, 31) << 12);
+}
+
+constexpr std::uint32_t extract_j_type_imm(std::uint32_t instruction)
+{
+    auto imm1_10 = extract(instruction, 21, 30);  // bits 30:21
+    auto imm11 = extract(instruction, 20);        // bit 20
+    auto imm12_19 = extract(instruction, 12, 19); // bits 19:12
+    auto imm20 = extract(instruction, 31);        // bit 31
+
+    return static_cast<std::uint32_t>((imm20 << 20) | (imm12_19 << 12) | (imm11 << 11) | (imm1_10 << 1));
+}

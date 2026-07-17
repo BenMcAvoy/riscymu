@@ -9,7 +9,7 @@
 struct CPUAccessor;
 
 // Helper function to index registers
-enum class RegisterIdx
+enum class RegisterIdx : std::uint8_t
 {
     X0 = 0,
     X1 = 1,
@@ -80,20 +80,19 @@ enum class RegisterIdx
 };
 
 class CPU;
-using execute_t = void (CPU::*)(Instruction &);
+using execute_t = void (CPU::*)(std::uint32_t);
 
 class CPU
 {
 public:
     CPU();
 
-    Instruction fetch_instruction();
+    bool step();
 
     inline void write_mem(std::uint64_t addr, const void *data, std::size_t size)
     {
         mem.write(addr, data, size);
     }
-
     template <typename T>
     inline T read_mem(std::uint64_t addr) const
     {
@@ -104,7 +103,6 @@ public:
     {
         return general_registers[static_cast<std::size_t>(idx)];
     }
-
     inline void set_register(RegisterIdx idx, std::uint64_t value)
     {
         if (idx == RegisterIdx::Zero)
@@ -114,7 +112,6 @@ public:
 
         general_registers[static_cast<std::size_t>(idx)] = value;
     }
-
     void set_register(std::size_t idx, std::uint64_t value)
     {
         set_register(static_cast<RegisterIdx>(idx), value);
@@ -126,9 +123,9 @@ public:
 
     void execute_instruction(const Instruction &ins);
 
-    int get_mhz();
-
+    // Instrumentation API
     void warm();
+    int get_mhz();
     void reset(bool reset_instrumentation = false);
 
 private:
@@ -136,29 +133,31 @@ private:
     std::array<std::uint64_t, 32> general_registers;
     std::uintptr_t pc; // sp reg for the program counter
 
+    /*
     void decode_full_r_type(Instruction &ins, std::int32_t full) const;
     void decode_full_i_type(Instruction &ins, std::int32_t full) const;
     void decode_full_s_type(Instruction &ins, std::int32_t full) const;
     void decode_full_b_type(Instruction &ins, std::int32_t full) const;
     void decode_full_u_type(Instruction &ins, std::int32_t full) const;
     void decode_full_j_type(Instruction &ins, std::int32_t full) const;
+    */
 
-    execute_t get_instruction_handler(Instruction &ins, std::uint32_t full, OpGroup opgroup) const;
+    inline execute_t get_instruction_handler(std::uint32_t ins) const;
 
-    inline execute_t decode_full_op(Instruction &ins) const;
-    inline execute_t decode_full_op_imm(Instruction &ins) const;
-    inline execute_t decode_full_load(Instruction &ins) const;
-    inline execute_t decode_full_store(Instruction &ins) const;
-    inline execute_t decode_full_branch(Instruction &ins) const;
-    inline execute_t decode_full_jal(Instruction &ins) const;
-    inline execute_t decode_full_jalr(Instruction &ins) const;
-    inline execute_t decode_full_auipc(Instruction &ins) const;
-    inline execute_t decode_full_lui(Instruction &ins) const;
-    inline execute_t decode_full_etype(Instruction &ins) const;
-    inline execute_t decode_full_fence(Instruction &ins) const;
+    inline execute_t get_op_instruction_handler(std::uint32_t ins) const;
+    inline execute_t get_op_imm_instruction_handler(std::uint32_t ins) const;
+    inline execute_t get_load_instruction_handler(std::uint32_t ins) const;
+    inline execute_t get_store_instruction_handler(std::uint32_t ins) const;
+    inline execute_t get_branch_instruction_handler(std::uint32_t ins) const;
+    inline execute_t get_jal_instruction_handler(std::uint32_t ins) const;
+    inline execute_t get_jalr_instruction_handler(std::uint32_t ins) const;
+    inline execute_t get_auipc_instruction_handler(std::uint32_t ins) const;
+    inline execute_t get_lui_instruction_handler(std::uint32_t ins) const;
+    inline execute_t get_etype_instruction_handler(std::uint32_t ins) const;
+    inline execute_t get_fence_instruction_handler(std::uint32_t ins) const;
 
-    inline void fetch_full_instruction(Instruction &ins, std::uint32_t full);
-    inline void fetch_half_instruction(Instruction &ins, std::uint16_t half) const;
+    inline void step_full_instruction(std::uint32_t full);
+    inline void step_half_instruction(std::uint16_t half);
 
     int executed_instructions;
     std::chrono::time_point<std::chrono::high_resolution_clock> start_time;
@@ -167,47 +166,47 @@ protected:
     // Inlining won't help here
     // we use a function pointer
 
-    void execute_add(Instruction &ins);
-    void execute_sub(Instruction &ins);
-    void execute_xor(Instruction &ins);
-    void execute_or(Instruction &ins);
-    void execute_and(Instruction &ins);
-    void execute_sll(Instruction &ins);
-    void execute_srl(Instruction &ins);
-    void execute_sra(Instruction &ins);
-    void execute_slt(Instruction &ins);
-    void execute_sltu(Instruction &ins);
-    void execute_addi(Instruction &ins);
-    void execute_xori(Instruction &ins);
-    void execute_ori(Instruction &ins);
-    void execute_andi(Instruction &ins);
-    void execute_slli(Instruction &ins);
-    void execute_srli(Instruction &ins);
-    void execute_srai(Instruction &ins);
-    void execute_slti(Instruction &ins);
-    void execute_sltiu(Instruction &ins);
-    void execute_lb(Instruction &ins);
-    void execute_lh(Instruction &ins);
-    void execute_lw(Instruction &ins);
-    void execute_lbu(Instruction &ins);
-    void execute_lhu(Instruction &ins);
-    void execute_sb(Instruction &ins);
-    void execute_sh(Instruction &ins);
-    void execute_sw(Instruction &ins);
-    void execute_beq(Instruction &ins);
-    void execute_bne(Instruction &ins);
-    void execute_blt(Instruction &ins);
-    void execute_bge(Instruction &ins);
-    void execute_bltu(Instruction &ins);
-    void execute_bgeu(Instruction &ins);
-    void execute_jal(Instruction &ins);
-    void execute_jalr(Instruction &ins);
-    void execute_lui(Instruction &ins);
-    void execute_auipc(Instruction &ins);
-    void execute_ecall(Instruction &ins);
-    void execute_ebreak(Instruction &ins);
-    void execute_fence(Instruction &ins);
-    void execute_na(Instruction &ins);
+    void execute_add(std::uint32_t ins);
+    void execute_sub(std::uint32_t ins);
+    void execute_xor(std::uint32_t ins);
+    void execute_or(std::uint32_t ins);
+    void execute_and(std::uint32_t ins);
+    void execute_sll(std::uint32_t ins);
+    void execute_srl(std::uint32_t ins);
+    void execute_sra(std::uint32_t ins);
+    void execute_slt(std::uint32_t ins);
+    void execute_sltu(std::uint32_t ins);
+    void execute_addi(std::uint32_t ins);
+    void execute_xori(std::uint32_t ins);
+    void execute_ori(std::uint32_t ins);
+    void execute_andi(std::uint32_t ins);
+    void execute_slli(std::uint32_t ins);
+    void execute_srli(std::uint32_t ins);
+    void execute_srai(std::uint32_t ins);
+    void execute_slti(std::uint32_t ins);
+    void execute_sltiu(std::uint32_t ins);
+    void execute_lb(std::uint32_t ins);
+    void execute_lh(std::uint32_t ins);
+    void execute_lw(std::uint32_t ins);
+    void execute_lbu(std::uint32_t ins);
+    void execute_lhu(std::uint32_t ins);
+    void execute_sb(std::uint32_t ins);
+    void execute_sh(std::uint32_t ins);
+    void execute_sw(std::uint32_t ins);
+    void execute_beq(std::uint32_t ins);
+    void execute_bne(std::uint32_t ins);
+    void execute_blt(std::uint32_t ins);
+    void execute_bge(std::uint32_t ins);
+    void execute_bltu(std::uint32_t ins);
+    void execute_bgeu(std::uint32_t ins);
+    void execute_jal(std::uint32_t ins);
+    void execute_jalr(std::uint32_t ins);
+    void execute_lui(std::uint32_t ins);
+    void execute_auipc(std::uint32_t ins);
+    void execute_ecall(std::uint32_t ins);
+    void execute_ebreak(std::uint32_t ins);
+    void execute_fence(std::uint32_t ins);
+    void execute_na(std::uint32_t ins);
 
 private:
     Mem<1024 * 1024> mem{}; // 1MB of memory

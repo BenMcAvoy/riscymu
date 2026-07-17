@@ -12,14 +12,14 @@ CPU::CPU()
     general_registers.fill(0);
     pc = 0;
     executed_instructions = 0;
-    start_time = std::chrono::high_resolution_clock::now();
 }
 
-void CPU::fetch_half_instruction(Instruction &ins, std::uint16_t half) const
+void CPU::step_half_instruction(std::uint16_t half)
 {
     throw std::runtime_error("C extension instructions are not supported yet");
 }
 
+/*
 void CPU::decode_full_r_type(Instruction &ins, std::int32_t full) const
 {
     ins.format = Format::R;
@@ -82,289 +82,78 @@ void CPU::decode_full_j_type(Instruction &ins, std::int32_t full) const
 
     ins.imm = sign_extend(imm, 21);
 }
+*/
 
-execute_t CPU::get_instruction_handler(Instruction &ins, std::uint32_t full, OpGroup opgroup) const
+execute_t CPU::get_instruction_handler(std::uint32_t ins) const
 {
+    OpGroup opgroup = static_cast<OpGroup>(extract_opcode(ins));
+
     switch (opgroup)
     {
     case OpGroup::Op:
-        return decode_full_op(ins);
+        return get_op_instruction_handler(ins);
     case OpGroup::OpImm:
-        return decode_full_op_imm(ins);
+        return get_op_imm_instruction_handler(ins);
     case OpGroup::Load:
-        return decode_full_load(ins);
+        return get_load_instruction_handler(ins);
     case OpGroup::Store:
-        return decode_full_store(ins);
+        return get_store_instruction_handler(ins);
     case OpGroup::Branch:
-        return decode_full_branch(ins);
+        return get_branch_instruction_handler(ins);
     case OpGroup::Jal:
-        return decode_full_jal(ins);
+        return get_jal_instruction_handler(ins);
     case OpGroup::Jalr:
-        return decode_full_jalr(ins);
+        return get_jalr_instruction_handler(ins);
     case OpGroup::Lui:
-        return decode_full_lui(ins);
+        return get_lui_instruction_handler(ins);
     case OpGroup::Auipc:
-        return decode_full_auipc(ins);
+        return get_auipc_instruction_handler(ins);
     case OpGroup::EType:
-        return decode_full_etype(ins);
+        return get_etype_instruction_handler(ins);
     case OpGroup::Fence:
-        return decode_full_fence(ins);
+        return get_fence_instruction_handler(ins);
     }
 }
 
-void CPU::fetch_full_instruction(Instruction &ins, std::uint32_t full)
+void CPU::step_full_instruction(std::uint32_t full)
 {
     OpGroup opgroup = static_cast<OpGroup>(extract_opcode(full));
-    ins.opgroup = opgroup;
 
-    switch (opgroup)
-    {
-    case OpGroup::Op:
-        decode_full_r_type(ins, full);
-        break;
-
-    case OpGroup::OpImm:
-        decode_full_i_type(ins, full);
-        break;
-
-    case OpGroup::Load:
-        decode_full_i_type(ins, full);
-        break;
-
-    case OpGroup::Store:
-        decode_full_s_type(ins, full);
-        break;
-
-    case OpGroup::Branch:
-        decode_full_b_type(ins, full);
-        break;
-
-    case OpGroup::Jal:
-        decode_full_j_type(ins, full);
-        break;
-
-    case OpGroup::Jalr:
-        decode_full_i_type(ins, full);
-        break;
-
-    case OpGroup::Lui:
-        decode_full_u_type(ins, full);
-        break;
-
-    case OpGroup::Auipc:
-        decode_full_u_type(ins, full);
-        break;
-
-    case OpGroup::EType:
-        decode_full_i_type(ins, full);
-        break;
-
-    case OpGroup::Fence:
-        decode_full_i_type(ins, full);
-        break;
-
-    default:
-        throw std::runtime_error("Unsupported instruction format");
-    }
-
-    // fetch calls execute temporary.
-    (this->*get_instruction_handler(ins, full, opgroup))(ins);
+    // fetch calls execute temporarily
+    (this->*get_instruction_handler(full))(full);
 
     bool is_branch = (opgroup == OpGroup::Branch) || (opgroup == OpGroup::Jal) || (opgroup == OpGroup::Jalr);
     if (!is_branch)
     {
-        pc += ins.length;
+        // NOTE: always 4 in full handler, 2 in half handler
+        pc += 4;
     }
 
     executed_instructions++;
 }
 
-Instruction CPU::fetch_instruction()
+bool CPU::step()
 {
-    Instruction ins;
-
     std::uint16_t half = mem.read<std::uint16_t>(pc);
     if (half == 0) [[unlikely]]
     {
-        ins.op = OpCode::NA;
-        return ins;
+        return false;
     }
 
     bool compressed = (half & bit_mask(2)) != bit_mask(2);
 
-    ins.raw = half;
-    ins.length = compressed ? 2 : 4;
-
     if (compressed) [[unlikely]]
     {
-        fetch_half_instruction(ins, half);
+        step_half_instruction(half);
     }
     else
     {
         std::uint16_t half2 = mem.read<std::uint16_t>(pc + 2);
-        ins.raw |= (half2 << 16);
-        fetch_full_instruction(ins, ins.raw);
+        std::uint32_t full = static_cast<std::uint32_t>(half) | (static_cast<std::uint32_t>(half2) << 16);
+        step_full_instruction(full);
     }
 
-    return ins;
-}
-
-void CPU::execute_instruction(const Instruction &ins)
-{
-    return;
-
-#define get(idx) get_register(static_cast<RegisterIdx>(idx))
-#define set(idx, value) set_register(static_cast<RegisterIdx>(idx), value)
-
-    auto &reg = general_registers;
-
-    bool is_branch = (ins.opgroup == OpGroup::Branch) || (ins.opgroup == OpGroup::Jal) || (ins.opgroup == OpGroup::Jalr);
-    bool increment_pc = !is_branch;
-
-    switch (ins.op)
-    {
-    case OpCode::Add:
-        set(ins.rd, get(ins.rs1) + get(ins.rs2));
-        break;
-    case OpCode::Sub:
-        set(ins.rd, get(ins.rs1) - get(ins.rs2));
-        break;
-    case OpCode::Xor:
-        set(ins.rd, get(ins.rs1) ^ get(ins.rs2));
-        break;
-    case OpCode::Or:
-        set(ins.rd, get(ins.rs1) | get(ins.rs2));
-        break;
-    case OpCode::And:
-        set(ins.rd, get(ins.rs1) & get(ins.rs2));
-        break;
-    case OpCode::Sll:
-        set(ins.rd, get(ins.rs1) << get(ins.rs2));
-        break;
-    case OpCode::Srl:
-        set(ins.rd, get(ins.rs1) >> get(ins.rs2));
-        break;
-    case OpCode::Sra:
-        set(ins.rd, static_cast<std::int64_t>(get(ins.rs1)) >> get(ins.rs2));
-        break;
-    case OpCode::Slt:
-        set(ins.rd, static_cast<std::int64_t>(get(ins.rs1)) < static_cast<std::int64_t>(get(ins.rs2)) ? 1 : 0);
-        break;
-    case OpCode::Sltu:
-        set(ins.rd, get(ins.rs1) < get(ins.rs2) ? 1 : 0);
-        break;
-    case OpCode::Addi:
-        set(ins.rd, get(ins.rs1) + ins.imm);
-        break;
-    case OpCode::Xori:
-        set(ins.rd, get(ins.rs1) ^ ins.imm);
-        break;
-    case OpCode::Ori:
-        set(ins.rd, get(ins.rs1) | ins.imm);
-        break;
-    case OpCode::Andi:
-        set(ins.rd, get(ins.rs1) & ins.imm);
-        break;
-    case OpCode::Slli:
-        set(ins.rd, get(ins.rs1) << ins.imm);
-        break;
-    case OpCode::Srli:
-        set(ins.rd, get(ins.rs1) >> ins.imm);
-        break;
-    case OpCode::Srai:
-        set(ins.rd, static_cast<std::int64_t>(get(ins.rs1)) >> ins.imm);
-        break;
-    case OpCode::Slti:
-        set(ins.rd, static_cast<std::int64_t>(get(ins.rs1)) < static_cast<std::int64_t>(ins.imm) ? 1 : 0);
-        break;
-    case OpCode::Sltiu:
-        set(ins.rd, get(ins.rs1) < static_cast<uint64_t>(ins.imm) ? 1 : 0);
-        break;
-    case OpCode::Lb:
-        set(ins.rd, mem.read<std::int8_t>(get(ins.rs1) + ins.imm));
-        break;
-    case OpCode::Lh:
-        set(ins.rd, mem.read<std::int16_t>(get(ins.rs1) + ins.imm));
-        break;
-    case OpCode::Lw:
-        set(ins.rd, mem.read<std::int32_t>(get(ins.rs1) + ins.imm));
-        break;
-    case OpCode::Lbu:
-        set(ins.rd, mem.read<std::uint8_t>(get(ins.rs1) + ins.imm));
-        break;
-    case OpCode::Lhu:
-        set(ins.rd, mem.read<std::uint16_t>(get(ins.rs1) + ins.imm));
-        break;
-    case OpCode::Sb:
-        mem.write<std::uint8_t>(get(ins.rs1) + ins.imm, get(ins.rs2));
-        break;
-    case OpCode::Sh:
-        mem.write<std::uint16_t>(get(ins.rs1) + ins.imm, get(ins.rs2));
-        break;
-    case OpCode::Sw:
-        mem.write<std::uint32_t>(get(ins.rs1) + ins.imm, get(ins.rs2));
-        break;
-    case OpCode::Beq:
-        pc += (get(ins.rs1) == get(ins.rs2)) ? ins.imm : ins.length;
-        break;
-    case OpCode::Bne:
-        pc += (get(ins.rs1) != get(ins.rs2)) ? ins.imm : ins.length;
-        break;
-    case OpCode::Blt:
-        pc += (static_cast<std::int64_t>(get(ins.rs1)) < static_cast<std::int64_t>(get(ins.rs2))) ? ins.imm : ins.length;
-        break;
-    case OpCode::Bge:
-        pc += (static_cast<std::int64_t>(get(ins.rs1)) >= static_cast<std::int64_t>(get(ins.rs2))) ? ins.imm : ins.length;
-        break;
-    case OpCode::Bltu:
-        pc += (get(ins.rs1) < get(ins.rs2)) ? ins.imm : ins.length;
-        break;
-    case OpCode::Bgeu:
-        pc += (get(ins.rs1) >= get(ins.rs2)) ? ins.imm : ins.length;
-        break;
-    case OpCode::Jal:
-        set(ins.rd, pc + 4);
-        pc += ins.imm;
-        break;
-    case OpCode::Jalr:
-        set(ins.rd, pc + 4);
-        pc = (get(ins.rs1) + ins.imm) & ~1ULL;
-        break;
-    case OpCode::Lui:
-        set(ins.rd, ins.imm);
-        break;
-    case OpCode::Auipc:
-        set(ins.rd, pc + ins.imm);
-        break;
-    case OpCode::Ecall:
-        // TODO: handle
-        throw std::runtime_error("Ecall instruction not implemented yet");
-        break;
-    case OpCode::Ebreak:
-        // TODO: handle
-        throw std::runtime_error("Ebreak instruction not implemented yet");
-        break;
-    case OpCode::Fence:
-        // TODO: handle
-        throw std::runtime_error("Fence instruction not implemented yet");
-        break;
-    case OpCode::NA:
-        throw std::runtime_error("Attempted to execute an instruction with OpCode::NA");
-        break;
-    default:
-        throw std::runtime_error("Attempted to execute an instruction with an unknown OpCode");
-        break;
-    }
-
-    if (increment_pc)
-    {
-        pc += ins.length;
-    }
-
-    executed_instructions++;
-
-#undef get
-#undef set
+    return true;
 }
 
 int CPU::get_mhz()
@@ -379,6 +168,10 @@ int CPU::get_mhz()
 void CPU::warm()
 {
     warm_tables();
+
+    std::println("Warmed up tables");
+
+    start_time = std::chrono::high_resolution_clock::now();
 }
 
 void CPU::reset(bool reset_instrumentation)
@@ -393,264 +186,388 @@ void CPU::reset(bool reset_instrumentation)
     }
 }
 
-execute_t CPU::decode_full_op(Instruction &ins) const
+execute_t CPU::get_op_instruction_handler(std::uint32_t ins) const
 {
-    auto funct3 = extract_funct3(ins.raw);
-    auto funct7 = extract_funct7(ins.raw);
+    auto funct3 = extract_funct3(ins);
+    auto funct7 = extract_funct7(ins);
 
     auto idx = (funct7 << 3) | funct3;
     return op_table[idx];
 }
 
-execute_t CPU::decode_full_op_imm(Instruction &ins) const
+execute_t CPU::get_op_imm_instruction_handler(std::uint32_t ins) const
 {
-    auto funct3 = extract_funct3(ins.raw);
-    auto imm_11_5 = ins.imm >> 5; // Extract bits 11:5 from the immediate value
+    auto funct3 = extract_funct3(ins);
+    auto imm_11_5 = extract_funct7(ins); // imm[11:5] lives in bits 31:25, same as funct7
 
     auto idx = (imm_11_5 << 3) | funct3;
     return op_imm_table[idx];
 }
 
-execute_t CPU::decode_full_load(Instruction &ins) const
+execute_t CPU::get_load_instruction_handler(std::uint32_t ins) const
 {
-    auto funct3 = extract_funct3(ins.raw);
+    auto funct3 = extract_funct3(ins);
     return load_table[funct3];
 }
 
-execute_t CPU::decode_full_store(Instruction &ins) const
+execute_t CPU::get_store_instruction_handler(std::uint32_t ins) const
 {
-    auto funct3 = extract_funct3(ins.raw);
+    auto funct3 = extract_funct3(ins);
     return store_table[funct3];
 }
 
-execute_t CPU::decode_full_branch(Instruction &ins) const
+execute_t CPU::get_branch_instruction_handler(std::uint32_t ins) const
 {
-    auto funct3 = extract_funct3(ins.raw);
+    auto funct3 = extract_funct3(ins);
     return branch_table[funct3];
 }
 
-execute_t CPU::decode_full_jal(Instruction &ins) const
+execute_t CPU::get_jal_instruction_handler(std::uint32_t ins) const
 {
     return jal_table[0];
 }
 
-execute_t CPU::decode_full_jalr(Instruction &ins) const
+execute_t CPU::get_jalr_instruction_handler(std::uint32_t ins) const
 {
     return jalr_table[0];
 }
 
-execute_t CPU::decode_full_lui(Instruction &ins) const
+execute_t CPU::get_lui_instruction_handler(std::uint32_t ins) const
 {
     return lui_table[0];
 }
 
-execute_t CPU::decode_full_auipc(Instruction &ins) const
+execute_t CPU::get_auipc_instruction_handler(std::uint32_t ins) const
 {
     return auipc_table[0];
 }
 
-execute_t CPU::decode_full_etype(Instruction &ins) const
+execute_t CPU::get_etype_instruction_handler(std::uint32_t ins) const
 {
-    return etype_table[ins.imm];
+    // TODO: could be expensive here
+    auto imm = extract_i_type_imm(ins);
+    return etype_table[imm];
 }
 
-execute_t CPU::decode_full_fence(Instruction &ins) const
+execute_t CPU::get_fence_instruction_handler(std::uint32_t ins) const
 {
     return fence_table[0];
 }
 
-#define get(idx) get_register(static_cast<RegisterIdx>(idx))
-#define set(idx, value) set_register(static_cast<RegisterIdx>(idx), value)
-void CPU::execute_add(Instruction &ins)
+#define get(idx) get_register(idx)
+#define set(idx, value) set_register(idx, value)
+void CPU::execute_add(std::uint32_t ins)
 {
-    ins.op = OpCode::Add;
-    set(ins.rd, get(ins.rs1) + get(ins.rs2));
+    auto rd = static_cast<RegisterIdx>(extract_rd(ins));
+    auto rs1 = static_cast<RegisterIdx>(extract_rs1(ins));
+    auto rs2 = static_cast<RegisterIdx>(extract_rs2(ins));
+
+    set(rd, get(rs1) + get(rs2));
 }
-void CPU::execute_sub(Instruction &ins)
+void CPU::execute_sub(std::uint32_t ins)
 {
-    ins.op = OpCode::Sub;
-    set(ins.rd, get(ins.rs1) - get(ins.rs2));
+    auto rd = static_cast<RegisterIdx>(extract_rd(ins));
+    auto rs1 = static_cast<RegisterIdx>(extract_rs1(ins));
+    auto rs2 = static_cast<RegisterIdx>(extract_rs2(ins));
+
+    set(rd, get(rs1) - get(rs2));
 }
-void CPU::execute_xor(Instruction &ins)
+void CPU::execute_xor(std::uint32_t ins)
 {
-    ins.op = OpCode::Xor;
-    set(ins.rd, get(ins.rs1) ^ get(ins.rs2));
+    auto rd = static_cast<RegisterIdx>(extract_rd(ins));
+    auto rs1 = static_cast<RegisterIdx>(extract_rs1(ins));
+    auto rs2 = static_cast<RegisterIdx>(extract_rs2(ins));
+
+    set(rd, get(rs1) ^ get(rs2));
 }
-void CPU::execute_or(Instruction &ins)
+void CPU::execute_or(std::uint32_t ins)
 {
-    ins.op = OpCode::Or;
-    set(ins.rd, get(ins.rs1) | get(ins.rs2));
+    auto rd = static_cast<RegisterIdx>(extract_rd(ins));
+    auto rs1 = static_cast<RegisterIdx>(extract_rs1(ins));
+    auto rs2 = static_cast<RegisterIdx>(extract_rs2(ins));
+
+    set(rd, get(rs1) | get(rs2));
 }
-void CPU::execute_and(Instruction &ins)
+void CPU::execute_and(std::uint32_t ins)
 {
-    ins.op = OpCode::And;
-    set(ins.rd, get(ins.rs1) & get(ins.rs2));
+    auto rd = static_cast<RegisterIdx>(extract_rd(ins));
+    auto rs1 = static_cast<RegisterIdx>(extract_rs1(ins));
+    auto rs2 = static_cast<RegisterIdx>(extract_rs2(ins));
+
+    set(rd, get(rs1) & get(rs2));
 }
-void CPU::execute_sll(Instruction &ins)
+void CPU::execute_sll(std::uint32_t ins)
 {
-    ins.op = OpCode::Sll;
-    set(ins.rd, get(ins.rs1) << get(ins.rs2));
+    auto rd = static_cast<RegisterIdx>(extract_rd(ins));
+    auto rs1 = static_cast<RegisterIdx>(extract_rs1(ins));
+    auto rs2 = static_cast<RegisterIdx>(extract_rs2(ins));
+
+    set(rd, get(rs1) << get(rs2));
 }
-void CPU::execute_srl(Instruction &ins)
+void CPU::execute_srl(std::uint32_t ins)
 {
-    ins.op = OpCode::Srl;
-    set(ins.rd, get(ins.rs1) >> get(ins.rs2));
+    auto rd = static_cast<RegisterIdx>(extract_rd(ins));
+    auto rs1 = static_cast<RegisterIdx>(extract_rs1(ins));
+    auto rs2 = static_cast<RegisterIdx>(extract_rs2(ins));
+
+    set(rd, get(rs1) >> get(rs2));
 }
-void CPU::execute_sra(Instruction &ins)
+void CPU::execute_sra(std::uint32_t ins)
 {
-    ins.op = OpCode::Sra;
-    set(ins.rd, static_cast<std::int64_t>(get(ins.rs1)) >> get(ins.rs2));
+    auto rd = static_cast<RegisterIdx>(extract_rd(ins));
+    auto rs1 = static_cast<RegisterIdx>(extract_rs1(ins));
+    auto rs2 = static_cast<RegisterIdx>(extract_rs2(ins));
+
+    set(rd, static_cast<std::int64_t>(get(rs1)) >> get(rs2));
 }
-void CPU::execute_slt(Instruction &ins)
+void CPU::execute_slt(std::uint32_t ins)
 {
-    ins.op = OpCode::Slt;
-    set(ins.rd, static_cast<std::int64_t>(get(ins.rs1)) < static_cast<std::int64_t>(get(ins.rs2)) ? 1 : 0);
+    auto rd = static_cast<RegisterIdx>(extract_rd(ins));
+    auto rs1 = static_cast<RegisterIdx>(extract_rs1(ins));
+    auto rs2 = static_cast<RegisterIdx>(extract_rs2(ins));
+
+    set(rd, static_cast<std::int64_t>(get(rs1)) < static_cast<std::int64_t>(get(rs2)) ? 1 : 0);
 }
-void CPU::execute_sltu(Instruction &ins)
+void CPU::execute_sltu(std::uint32_t ins)
 {
-    ins.op = OpCode::Sltu;
-    set(ins.rd, get(ins.rs1) < get(ins.rs2) ? 1 : 0);
+    auto rd = static_cast<RegisterIdx>(extract_rd(ins));
+    auto rs1 = static_cast<RegisterIdx>(extract_rs1(ins));
+    auto rs2 = static_cast<RegisterIdx>(extract_rs2(ins));
+
+    set(rd, get(rs1) < get(rs2) ? 1 : 0);
 }
-void CPU::execute_addi(Instruction &ins)
+void CPU::execute_addi(std::uint32_t ins)
 {
-    ins.op = OpCode::Addi;
-    set(ins.rd, get(ins.rs1) + ins.imm);
+    auto rd = static_cast<RegisterIdx>(extract_rd(ins));
+    auto rs1 = static_cast<RegisterIdx>(extract_rs1(ins));
+
+    auto imm = sign_extend(extract_i_type_imm(ins), 12);
+    set(rd, get(rs1) + imm);
 }
-void CPU::execute_xori(Instruction &ins)
+void CPU::execute_xori(std::uint32_t ins)
 {
-    ins.op = OpCode::Xori;
-    set(ins.rd, get(ins.rs1) ^ ins.imm);
+    auto rd = static_cast<RegisterIdx>(extract_rd(ins));
+    auto rs1 = static_cast<RegisterIdx>(extract_rs1(ins));
+
+    auto imm = sign_extend(extract_i_type_imm(ins), 12);
+    set(rd, get(rs1) ^ imm);
 }
-void CPU::execute_ori(Instruction &ins)
+void CPU::execute_ori(std::uint32_t ins)
 {
-    ins.op = OpCode::Ori;
-    set(ins.rd, get(ins.rs1) | ins.imm);
+    auto rd = static_cast<RegisterIdx>(extract_rd(ins));
+    auto rs1 = static_cast<RegisterIdx>(extract_rs1(ins));
+
+    auto imm = sign_extend(extract_i_type_imm(ins), 12);
+    set(rd, get(rs1) | imm);
 }
-void CPU::execute_andi(Instruction &ins)
+void CPU::execute_andi(std::uint32_t ins)
 {
-    ins.op = OpCode::Andi;
-    set(ins.rd, get(ins.rs1) & ins.imm);
+    auto rd = static_cast<RegisterIdx>(extract_rd(ins));
+    auto rs1 = static_cast<RegisterIdx>(extract_rs1(ins));
+
+    auto imm = sign_extend(extract_i_type_imm(ins), 12);
+    set(rd, get(rs1) & imm);
 }
-void CPU::execute_slli(Instruction &ins)
+void CPU::execute_slli(std::uint32_t ins)
 {
-    ins.op = OpCode::Slli;
-    set(ins.rd, get(ins.rs1) << ins.imm);
+    auto rd = static_cast<RegisterIdx>(extract_rd(ins));
+    auto rs1 = static_cast<RegisterIdx>(extract_rs1(ins));
+
+    auto imm = sign_extend(extract_i_type_imm(ins), 12);
+
+    set(rd, get(rs1) << imm);
 }
-void CPU::execute_srli(Instruction &ins)
+void CPU::execute_srli(std::uint32_t ins)
 {
-    ins.op = OpCode::Srli;
-    set(ins.rd, get(ins.rs1) >> ins.imm);
+    auto rd = static_cast<RegisterIdx>(extract_rd(ins));
+    auto rs1 = static_cast<RegisterIdx>(extract_rs1(ins));
+
+    auto imm = sign_extend(extract_i_type_imm(ins), 12);
+
+    set(rd, get(rs1) >> imm);
 }
-void CPU::execute_srai(Instruction &ins)
+void CPU::execute_srai(std::uint32_t ins)
 {
-    ins.op = OpCode::Srai;
-    set(ins.rd, static_cast<std::int64_t>(get(ins.rs1)) >> ins.imm);
+    auto rd = static_cast<RegisterIdx>(extract_rd(ins));
+    auto rs1 = static_cast<RegisterIdx>(extract_rs1(ins));
+
+    auto imm = sign_extend(extract_i_type_imm(ins), 12);
+    set(rd, static_cast<std::int64_t>(get(rs1)) >> imm);
 }
-void CPU::execute_slti(Instruction &ins)
+void CPU::execute_slti(std::uint32_t ins)
 {
-    ins.op = OpCode::Slti;
-    set(ins.rd, static_cast<std::int64_t>(get(ins.rs1)) < static_cast<std::int64_t>(ins.imm) ? 1 : 0);
+    auto rd = static_cast<RegisterIdx>(extract_rd(ins));
+    auto rs1 = static_cast<RegisterIdx>(extract_rs1(ins));
+
+    auto imm = sign_extend(extract_i_type_imm(ins), 12);
+    set(rd, static_cast<std::int64_t>(get(rs1)) < static_cast<std::int64_t>(imm) ? 1 : 0);
 }
-void CPU::execute_sltiu(Instruction &ins)
+void CPU::execute_sltiu(std::uint32_t ins)
 {
-    ins.op = OpCode::Sltiu;
-    set(ins.rd, get(ins.rs1) < static_cast<uint64_t>(ins.imm) ? 1 : 0);
+    auto rd = static_cast<RegisterIdx>(extract_rd(ins));
+    auto rs1 = static_cast<RegisterIdx>(extract_rs1(ins));
+
+    auto imm = sign_extend(extract_i_type_imm(ins), 12);
+    set(rd, get(rs1) < static_cast<std::uint64_t>(imm) ? 1 : 0);
 }
-void CPU::execute_lb(Instruction &ins)
+void CPU::execute_lb(std::uint32_t ins)
 {
-    ins.op = OpCode::Lb;
-    set(ins.rd, mem.read<std::int8_t>(get(ins.rs1) + ins.imm));
+    auto rd = static_cast<RegisterIdx>(extract_rd(ins));
+    auto rs1 = static_cast<RegisterIdx>(extract_rs1(ins));
+
+    auto imm = sign_extend(extract_i_type_imm(ins), 12);
+    set(rd, mem.read<std::int8_t>(get(rs1) + imm));
 }
-void CPU::execute_lh(Instruction &ins)
+void CPU::execute_lh(std::uint32_t ins)
 {
-    ins.op = OpCode::Lh;
-    set(ins.rd, mem.read<std::int16_t>(get(ins.rs1) + ins.imm));
+    auto rd = static_cast<RegisterIdx>(extract_rd(ins));
+    auto rs1 = static_cast<RegisterIdx>(extract_rs1(ins));
+
+    auto imm = sign_extend(extract_i_type_imm(ins), 12);
+    set(rd, mem.read<std::int16_t>(get(rs1) + imm));
 }
-void CPU::execute_lw(Instruction &ins)
+void CPU::execute_lw(std::uint32_t ins)
 {
-    ins.op = OpCode::Lw;
-    set(ins.rd, mem.read<std::int32_t>(get(ins.rs1) + ins.imm));
+    auto rd = static_cast<RegisterIdx>(extract_rd(ins));
+    auto rs1 = static_cast<RegisterIdx>(extract_rs1(ins));
+
+    auto imm = sign_extend(extract_i_type_imm(ins), 12);
+    set(rd, mem.read<std::int32_t>(get(rs1) + imm));
 }
-void CPU::execute_lbu(Instruction &ins)
+void CPU::execute_lbu(std::uint32_t ins)
 {
-    ins.op = OpCode::Lbu;
-    set(ins.rd, mem.read<std::uint8_t>(get(ins.rs1) + ins.imm));
+    auto rd = static_cast<RegisterIdx>(extract_rd(ins));
+    auto rs1 = static_cast<RegisterIdx>(extract_rs1(ins));
+
+    auto imm = sign_extend(extract_i_type_imm(ins), 12);
+    set(rd, mem.read<std::uint8_t>(get(rs1) + imm));
 }
-void CPU::execute_lhu(Instruction &ins)
+void CPU::execute_lhu(std::uint32_t ins)
 {
-    ins.op = OpCode::Lhu;
-    set(ins.rd, mem.read<std::uint16_t>(get(ins.rs1) + ins.imm));
+    auto rd = static_cast<RegisterIdx>(extract_rd(ins));
+    auto rs1 = static_cast<RegisterIdx>(extract_rs1(ins));
+
+    auto imm = sign_extend(extract_i_type_imm(ins), 12);
+    set(rd, mem.read<std::uint16_t>(get(rs1) + imm));
 }
-void CPU::execute_sb(Instruction &ins)
+void CPU::execute_sb(std::uint32_t ins)
 {
-    ins.op = OpCode::Sb;
-    mem.write<std::uint8_t>(get(ins.rs1) + ins.imm, get(ins.rs2));
+    auto rs1 = static_cast<RegisterIdx>(extract_rs1(ins));
+    auto rs2 = static_cast<RegisterIdx>(extract_rs2(ins));
+
+    auto imm = sign_extend(extract_s_type_imm(ins), 12);
+    mem.write<std::uint8_t>(get(rs1) + imm, get(rs2));
 }
-void CPU::execute_sh(Instruction &ins)
+void CPU::execute_sh(std::uint32_t ins)
 {
-    ins.op = OpCode::Sh;
-    mem.write<std::uint16_t>(get(ins.rs1) + ins.imm, get(ins.rs2));
+    auto rs1 = static_cast<RegisterIdx>(extract_rs1(ins));
+    auto rs2 = static_cast<RegisterIdx>(extract_rs2(ins));
+
+    auto imm = sign_extend(extract_s_type_imm(ins), 12);
+
+    mem.write<std::uint16_t>(get(rs1) + imm, get(rs2));
 }
-void CPU::execute_sw(Instruction &ins)
+void CPU::execute_sw(std::uint32_t ins)
 {
-    ins.op = OpCode::Sw;
-    mem.write<std::uint32_t>(get(ins.rs1) + ins.imm, get(ins.rs2));
+    auto rs1 = static_cast<RegisterIdx>(extract_rs1(ins));
+    auto rs2 = static_cast<RegisterIdx>(extract_rs2(ins));
+
+    auto imm = sign_extend(extract_s_type_imm(ins), 12);
+    mem.write<std::uint32_t>(get(rs1) + imm, get(rs2));
 }
-void CPU::execute_beq(Instruction &ins)
+void CPU::execute_beq(std::uint32_t ins)
 {
-    ins.op = OpCode::Beq;
-    pc += (get(ins.rs1) == get(ins.rs2)) ? ins.imm : ins.length;
+    auto rs1 = static_cast<RegisterIdx>(extract_rs1(ins));
+    auto rs2 = static_cast<RegisterIdx>(extract_rs2(ins));
+
+    auto imm = sign_extend(extract_b_type_imm(ins), 13);
+
+    // jump imm or 4 (default pc increment)
+    pc += (get(rs1) == get(rs2)) ? imm : 4;
 }
-void CPU::execute_bne(Instruction &ins)
+void CPU::execute_bne(std::uint32_t ins)
 {
-    ins.op = OpCode::Bne;
-    pc += (get(ins.rs1) != get(ins.rs2)) ? ins.imm : ins.length;
+    auto rs1 = static_cast<RegisterIdx>(extract_rs1(ins));
+    auto rs2 = static_cast<RegisterIdx>(extract_rs2(ins));
+
+    auto imm = sign_extend(extract_b_type_imm(ins), 13);
+
+    // jump imm or 4 (default pc increment)
+    pc += (get(rs1) != get(rs2)) ? imm : 4;
 }
-void CPU::execute_blt(Instruction &ins)
+void CPU::execute_blt(std::uint32_t ins)
 {
-    ins.op = OpCode::Blt;
-    pc += (static_cast<std::int64_t>(get(ins.rs1)) < static_cast<std::int64_t>(get(ins.rs2))) ? ins.imm : ins.length;
+    auto rs1 = static_cast<RegisterIdx>(extract_rs1(ins));
+    auto rs2 = static_cast<RegisterIdx>(extract_rs2(ins));
+
+    auto imm = sign_extend(extract_b_type_imm(ins), 13);
+
+    // jump imm or 4 (default pc increment)
+    pc += (static_cast<std::int64_t>(get(rs1)) < static_cast<std::int64_t>(get(rs2))) ? imm : 4;
 }
-void CPU::execute_bge(Instruction &ins)
+void CPU::execute_bge(std::uint32_t ins)
 {
-    ins.op = OpCode::Bge;
-    pc += (static_cast<std::int64_t>(get(ins.rs1)) >= static_cast<std::int64_t>(get(ins.rs2))) ? ins.imm : ins.length;
+    auto rs1 = static_cast<RegisterIdx>(extract_rs1(ins));
+    auto rs2 = static_cast<RegisterIdx>(extract_rs2(ins));
+
+    auto imm = sign_extend(extract_b_type_imm(ins), 13);
+
+    // jump imm or 4 (default pc increment)
+    pc += (static_cast<std::int64_t>(get(rs1)) >= static_cast<std::int64_t>(get(rs2))) ? imm : 4;
 }
-void CPU::execute_bltu(Instruction &ins)
+void CPU::execute_bltu(std::uint32_t ins)
 {
-    ins.op = OpCode::Bltu;
-    pc += (get(ins.rs1) < get(ins.rs2)) ? ins.imm : ins.length;
+    auto rs1 = static_cast<RegisterIdx>(extract_rs1(ins));
+    auto rs2 = static_cast<RegisterIdx>(extract_rs2(ins));
+
+    auto imm = sign_extend(extract_b_type_imm(ins), 13);
+
+    // jump imm or 4 (default pc increment)
+    pc += (get(rs1) < get(rs2)) ? imm : 4;
 }
-void CPU::execute_bgeu(Instruction &ins)
+void CPU::execute_bgeu(std::uint32_t ins)
 {
-    ins.op = OpCode::Bgeu;
-    pc += (get(ins.rs1) >= get(ins.rs2)) ? ins.imm : ins.length;
+    auto rs1 = static_cast<RegisterIdx>(extract_rs1(ins));
+    auto rs2 = static_cast<RegisterIdx>(extract_rs2(ins));
+
+    auto imm = sign_extend(extract_b_type_imm(ins), 13);
+
+    // jump imm or 4 (default pc increment)
+    pc += (get(rs1) >= get(rs2)) ? imm : 4;
 }
-void CPU::execute_jal(Instruction &ins)
+void CPU::execute_jal(std::uint32_t ins)
 {
-    ins.op = OpCode::Jal;
-    set(ins.rd, pc + 4);
-    pc += ins.imm;
+    auto rd = static_cast<RegisterIdx>(extract_rd(ins));
+
+    auto imm = sign_extend(extract_j_type_imm(ins), 21);
+
+    set(rd, pc + 4);
+    pc += imm;
 }
-void CPU::execute_jalr(Instruction &ins)
+void CPU::execute_jalr(std::uint32_t ins)
 {
-    ins.op = OpCode::Jalr;
-    set(ins.rd, pc + 4);
-    pc = (get(ins.rs1) + ins.imm) & ~1ULL;
+    auto rd = static_cast<RegisterIdx>(extract_rd(ins));
+    auto rs1 = static_cast<RegisterIdx>(extract_rs1(ins));
+    auto imm = sign_extend(extract_i_type_imm(ins), 12);
+
+    set(rd, pc + 4);
+    pc = (get(rs1) + imm) & ~1ULL;
 }
-void CPU::execute_lui(Instruction &ins)
+void CPU::execute_lui(std::uint32_t ins)
 {
-    ins.op = OpCode::Lui;
-    set(ins.rd, ins.imm);
+    auto rd = static_cast<RegisterIdx>(extract_rd(ins));
+    auto imm = sign_extend(extract_u_type_imm(ins), 21);
+    set(rd, imm);
 }
-void CPU::execute_auipc(Instruction &ins)
+void CPU::execute_auipc(std::uint32_t ins)
 {
-    ins.op = OpCode::Auipc;
-    set(ins.rd, pc + ins.imm);
+    auto rd = static_cast<RegisterIdx>(extract_rd(ins));
+    auto imm = sign_extend(extract_u_type_imm(ins), 21);
+    set(rd, pc + imm);
 }
-void CPU::execute_ecall(Instruction &ins) { ins.op = OpCode::Ecall; }
-void CPU::execute_ebreak(Instruction &ins) { ins.op = OpCode::Ebreak; }
-void CPU::execute_fence(Instruction &ins) { ins.op = OpCode::Fence; }
-void CPU::execute_na(Instruction &ins) {}
+void CPU::execute_ecall(std::uint32_t ins) {}
+void CPU::execute_ebreak(std::uint32_t ins) {}
+void CPU::execute_fence(std::uint32_t ins) {}
+void CPU::execute_na(std::uint32_t ins) {}
 #undef get
 #undef set

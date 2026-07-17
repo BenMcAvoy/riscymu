@@ -30,12 +30,8 @@ int main(int argc, char **argv)
     {
         cpu->reset(false);
 
-        Instruction ins = cpu->fetch_instruction();
-
-        while (ins.op != OpCode::NA)
+        while (cpu->step())
         {
-            cpu->execute_instruction(ins);
-            ins = cpu->fetch_instruction();
         }
     }
 

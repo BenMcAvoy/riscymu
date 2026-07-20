@@ -52,8 +52,6 @@ execute_t CPU::get_instruction_handler(std::uint32_t ins) const
 
 void CPU::step_full_instruction(std::uint32_t full)
 {
-    OpGroup opgroup = static_cast<OpGroup>(extract_opcode(full));
-
     (this->*get_instruction_handler(full))(full);
     pc += 4;
 
@@ -62,22 +60,20 @@ void CPU::step_full_instruction(std::uint32_t full)
 
 bool CPU::step()
 {
-    std::uint16_t half = mem.read<std::uint16_t>(pc);
-    if (half == 0) [[unlikely]]
+    std::uint32_t full = mem.read<std::uint32_t>(pc);
+    if ((full & 0xFFFFu) == 0) [[unlikely]]
     {
         return false;
     }
 
-    bool compressed = (half & bit_mask(2)) != bit_mask(2);
+    bool compressed = (full & 0b11u) != 0b11u;
 
     if (compressed) [[unlikely]]
     {
-        step_half_instruction(half);
+        step_half_instruction(static_cast<std::uint16_t>(full));
     }
     else
     {
-        std::uint16_t half2 = mem.read<std::uint16_t>(pc + 2);
-        std::uint32_t full = static_cast<std::uint32_t>(half) | (static_cast<std::uint32_t>(half2) << 16);
         step_full_instruction(full);
     }
 
@@ -126,7 +122,7 @@ execute_t CPU::get_op_instruction_handler(std::uint32_t ins) const
 execute_t CPU::get_op_imm_instruction_handler(std::uint32_t ins) const
 {
     auto funct3 = extract_funct3(ins);
-    auto imm_11_5 = extract_funct7(ins); // imm[11:5] lives in bits 31:25, same as funct7
+    auto imm_11_5 = extract_funct7(ins);
 
     auto idx = (imm_11_5 << 3) | funct3;
     return op_imm_table[idx];
